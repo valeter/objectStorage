@@ -9,7 +9,7 @@ import java.io.IOException;
 /**
  * @author Ivan Anisimov (ivananisimov2010@gmail.com)
  */
-class Index {
+class FileBasedIndex {
 	private static final int ESTIMATED_HASH_TABLE_SIZE = 1_000_000;
 
 	private static final long FIRST_POINTER_POSITION = 0;
@@ -27,13 +27,13 @@ class Index {
 
 	private String fileName;
 
-	public Index(String fileName, boolean newIndex) throws IOException {
+	public FileBasedIndex(String fileName, boolean newIndex) throws IOException {
 		this(fileName, newIndex, ESTIMATED_HASH_TABLE_SIZE);
 	}
 
-	Index(String fileName, boolean newIndex, int HASH_TABLE_SIZE) throws IOException {
+	FileBasedIndex(String fileName, boolean newIndex, int HASH_TABLE_SIZE) throws IOException {
 		this.HASH_TABLE_SIZE = HASH_TABLE_SIZE;
-		this.CELL_COUNT_POSITION = this.HASH_TABLE_SIZE * TypeSizes.BYTES_IN_LONG;
+		this.CELL_COUNT_POSITION = FIRST_POINTER_POSITION + this.HASH_TABLE_SIZE * TypeSizes.BYTES_IN_LONG;
 		this.FIRST_CELL_POSITION = this.CELL_COUNT_POSITION + TypeSizes.BYTES_IN_LONG;
 
 		this.fileName = fileName;
@@ -57,9 +57,9 @@ class Index {
 			while (cellAddress != END_POINTER) {
 				long cellID = in.readLong(cellAddress + CELL_OFFSET_ID);
 				if (cellID == ID) {
-					long cellFileNum = in.readLong(cellAddress + CELL_OFFSET_FILE_NUM);
+					int cellFileNum = (int) in.readLong(cellAddress + CELL_OFFSET_FILE_NUM);
 					long cellFilePosition = in.readLong(cellAddress + CELL_OFFSET_FILE_POSITION);
-					long cellObjectSize = in.readLong(cellAddress + CELL_OFFSET_OBJECT_SIZE);
+					int cellObjectSize = (int) in.readLong(cellAddress + CELL_OFFSET_OBJECT_SIZE);
 
 					return new ObjectAddress(cellFileNum, cellFilePosition, cellObjectSize);
 				}
@@ -75,12 +75,37 @@ class Index {
 		return hash * TypeSizes.BYTES_IN_LONG;
 	}
 
+	public void removeAddress(long ID) throws IOException {
+		long pointerAddress = getPointerAddress(ID);
+
+		try (FileReaderWriter rw = FileReaderWriter.openForReadingWriting(fileName)) {
+			long cellAddress = rw.readLong(pointerAddress);
+			long prevAddress = pointerAddress;
+			boolean found = false;
+			while (cellAddress != END_POINTER) {
+				long cellID = rw.readLong(cellAddress + CELL_OFFSET_ID);
+				if (cellID == ID) {
+					found = true;
+					break;
+				}
+
+				prevAddress = cellAddress;
+				cellAddress = rw.readLong(cellAddress + CELL_OFFSET_NEXT_POINTER);
+			}
+
+			if (found) {
+				long nextAddress = rw.readLong(cellAddress + CELL_OFFSET_NEXT_POINTER);
+				rw.writeLong(prevAddress, nextAddress);
+			}
+		}
+	}
+
 	public void putAddress(long ID, ObjectAddress address) throws IOException {
 		long pointerAddress = getPointerAddress(ID);
 
 		try (FileReaderWriter rw = FileReaderWriter.openForReadingWriting(fileName)) {
 			long cellAddress = rw.readLong(pointerAddress);
-
+			long prevAddress = pointerAddress;
 			while (cellAddress != END_POINTER) {
 				long cellID = rw.readLong(cellAddress + CELL_OFFSET_ID);
 				if (cellID == ID) {
@@ -88,21 +113,13 @@ class Index {
 					return;
 				}
 
-				long tempAddress = rw.readLong(cellAddress + CELL_OFFSET_NEXT_POINTER);
-				if (tempAddress != END_POINTER) {
-					cellAddress = tempAddress;
-				} else {
-					break;
-				}
-			}
-
-			if (cellAddress == END_POINTER) {
-				cellAddress = pointerAddress;
+				cellAddress = rw.readLong(cellAddress + CELL_OFFSET_NEXT_POINTER);
+				prevAddress = cellAddress;
 			}
 
 			long cellCount = rw.readLong(CELL_COUNT_POSITION);
 			long nextAddress = FIRST_CELL_POSITION + cellCount * CELL_SIZE;
-			rw.writeLong(cellAddress, nextAddress);
+			rw.writeLong(prevAddress, nextAddress);
 			rw.writeLong(nextAddress + CELL_OFFSET_ID, ID);
 			writeObjectAddress(rw, nextAddress, address);
 			rw.writeLong(nextAddress + CELL_OFFSET_NEXT_POINTER, END_POINTER);
