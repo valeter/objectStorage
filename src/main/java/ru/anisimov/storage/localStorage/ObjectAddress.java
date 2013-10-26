@@ -8,17 +8,17 @@ import java.util.Arrays;
 class ObjectAddress {
 	public static final ObjectAddress EMPTY_ADDRESS = new ObjectAddress(-1, -1, -1);
 
-	private long fileNumber;
+	private int fileNumber;
 	private long filePosition;
-	private long objectSize;
+	private int objectSize;
 
-	public ObjectAddress(long fileNumber, long filePosition, long objectSize) {
+	public ObjectAddress(int fileNumber, long filePosition, int objectSize) {
 		this.fileNumber = fileNumber;
 		this.filePosition = filePosition;
 		this.objectSize = objectSize;
 	}
 
-	public long getFileNumber() {
+	public int getFileNumber() {
 		return fileNumber;
 	}
 
@@ -26,7 +26,7 @@ class ObjectAddress {
 		return filePosition;
 	}
 
-	public long getObjectSize() {
+	public int getObjectSize() {
 		return objectSize;
 	}
 
