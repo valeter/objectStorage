@@ -19,6 +19,9 @@ class FileBasedIDGenerator implements IDGenerator, Serializable {
 	private static final long FREE_ID_COUNT_POSITION = COUNTER_POSITION + TypeSizes.BYTES_IN_LONG;
 	private static final long FREE_ID_POSITION = FREE_ID_COUNT_POSITION + TypeSizes.BYTES_IN_LONG;
 
+	private static final byte ACTIVE_COUNTER_VALUE = 1;
+	private static final byte INACTIVE_COUNTER_VALUE = -1;
+
 	private final long MIN_ID;
 	private final long MAX_ID;
 
@@ -34,12 +37,14 @@ class FileBasedIDGenerator implements IDGenerator, Serializable {
 		this.MIN_ID = MIN_ID;
 		this.MAX_ID = MAX_ID;
 		this.fileName = fileName;
-		if (newGenerator) {
-			new File(fileName).createNewFile();
-			FileReaderWriter.writeBytes(fileName, 0, (byte) 1);
-			FileReaderWriter.writeLong(fileName, 1, this.MIN_ID);
+		try (FileReaderWriter rw = FileReaderWriter.openForReadingWriting(this.fileName)) {
+			if (newGenerator) {
+				new File(fileName).createNewFile();
+				rw.writeBytes(COUNTER_FLAG_POSITION, ACTIVE_COUNTER_VALUE);
+				rw.writeLong(COUNTER_POSITION, this.MIN_ID);
+			}
+			counterActive = rw.readByte(COUNTER_FLAG_POSITION) == ACTIVE_COUNTER_VALUE;
 		}
-		counterActive = FileReaderWriter.readByte(fileName, COUNTER_FLAG_POSITION) == 1;
 	}
 
 	@Override
@@ -54,34 +59,38 @@ class FileBasedIDGenerator implements IDGenerator, Serializable {
 	}
 
 	private long getAndIncrementCounter() throws IOException {
-		long counter = FileReaderWriter.readLong(fileName, COUNTER_POSITION);
-		if (counter >= MAX_ID) {
-			FileReaderWriter.writeBytes(fileName, COUNTER_FLAG_POSITION, (byte)-1);
-			counterActive = false;
-		} else {
-			FileReaderWriter.writeLong(fileName, COUNTER_POSITION, counter + 1);
+		try (FileReaderWriter rw = FileReaderWriter.openForReadingWriting(fileName)) {
+			long counter = rw.readLong(COUNTER_POSITION);
+			if (counter >= MAX_ID) {
+				rw.writeBytes(COUNTER_FLAG_POSITION, INACTIVE_COUNTER_VALUE);
+				counterActive = false;
+			} else {
+				rw.writeLong(COUNTER_POSITION, counter + 1);
+			}
+			return counter;
 		}
-		return counter;
 	}
 
 	private long pollLastFreeID() throws IOException, IDGeneratorException {
-		long freeIdCount = FileReaderWriter.readLong(fileName, FREE_ID_COUNT_POSITION);
-		if (freeIdCount == 0) {
-			throw new IDGeneratorException("No more free IDs");
+		try (FileReaderWriter rw = FileReaderWriter.openForReadingWriting(fileName)) {
+			long freeIdCount = rw.readLong(FREE_ID_COUNT_POSITION);
+			if (freeIdCount == 0) {
+				throw new IDGeneratorException("No more free IDs");
+			}
+			long lastFreeIDPosition = FREE_ID_POSITION + ((freeIdCount - 1) * TypeSizes.BYTES_IN_LONG);
+			long freeID = rw.readLong(lastFreeIDPosition);
+			rw.writeLong(FREE_ID_COUNT_POSITION, freeIdCount - 1);
+			return freeID;
 		}
-		long lastFreeIDPosition = FREE_ID_POSITION + ((freeIdCount - 1) * TypeSizes.BYTES_IN_LONG);
-		long freeID = FileReaderWriter.readLong(fileName, lastFreeIDPosition);
-		FileReaderWriter.writeLong(fileName, FREE_ID_COUNT_POSITION, freeIdCount - 1);
-		return freeID;
 	}
 
 	@Override
 	public void addFreeID(long ID) throws IDGeneratorException {
-		try {
-			long freeIdCount = FileReaderWriter.readLong(fileName, FREE_ID_COUNT_POSITION);
+		try (FileReaderWriter rw = FileReaderWriter.openForReadingWriting(fileName)) {
+			long freeIdCount = rw.readLong(FREE_ID_COUNT_POSITION);
 			long positionAfterLastFreeID = FREE_ID_POSITION + ((freeIdCount) * TypeSizes.BYTES_IN_LONG);
-			FileReaderWriter.writeLong(fileName, positionAfterLastFreeID, ID);
-			FileReaderWriter.writeLong(fileName, FREE_ID_COUNT_POSITION, freeIdCount + 1);
+			rw.writeLong(positionAfterLastFreeID, ID);
+			rw.writeLong(FREE_ID_COUNT_POSITION, freeIdCount + 1);
 		} catch (IOException e) {
 			throw new IDGeneratorException(e);
 		}
