@@ -129,4 +129,20 @@ public class FileReaderWriterTest {
 			out.writeLong(0);
 		}
 	}
+
+	@Test
+	public void testWriteInts() throws Exception {
+		try (FileReaderWriter rw = FileReaderWriter.openForReadingWriting(TEST_FILE_NAME)) {
+			for (int i = 0; i < CONTENT.length; i++) {
+				int intsCount = rnd.nextInt(1000) + 1;
+				int[] ints = DataGenerator.generateInts(intsCount);
+				rw.writeInt(i, ints);
+				for (int j = 0; j < intsCount; j++) {
+					int expected = ints[j];
+					int actual = rw.readInt(i + (j * TypeSizes.BYTES_IN_INT));
+					assertEquals(expected, actual);
+				}
+			}
+		}
+	}
 }

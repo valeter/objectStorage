@@ -50,7 +50,7 @@ public class FileBasedIndexTest {
 		DataGenerator.generateObjects(addresses, new DataGenerator.ObjectGenerator<ObjectAddress>() {
 			@Override
 			public ObjectAddress generate(Random rnd) {
-				return new ObjectAddress(rnd.nextLong(), rnd.nextLong(), rnd.nextLong());
+				return new ObjectAddress(rnd.nextInt(), rnd.nextLong());
 			}
 		});
 
@@ -75,7 +75,7 @@ public class FileBasedIndexTest {
 		DataGenerator.generateObjects(addresses, new DataGenerator.ObjectGenerator<ObjectAddress>() {
 			@Override
 			public ObjectAddress generate(Random rnd) {
-				return new ObjectAddress(rnd.nextLong(), rnd.nextLong(), rnd.nextLong());
+				return new ObjectAddress(rnd.nextInt(), rnd.nextLong());
 			}
 		});
 
@@ -97,7 +97,7 @@ public class FileBasedIndexTest {
 		DataGenerator.generateObjects(addresses, new DataGenerator.ObjectGenerator<ObjectAddress>() {
 			@Override
 			public ObjectAddress generate(Random rnd) {
-				return new ObjectAddress(rnd.nextLong(), rnd.nextLong(), rnd.nextLong());
+				return new ObjectAddress(rnd.nextInt(), rnd.nextLong());
 			}
 		});
 
@@ -125,7 +125,7 @@ public class FileBasedIndexTest {
 		DataGenerator.generateObjects(addresses, new DataGenerator.ObjectGenerator<ObjectAddress>() {
 			@Override
 			public ObjectAddress generate(Random rnd) {
-				return new ObjectAddress(rnd.nextLong(), rnd.nextLong(), rnd.nextLong());
+				return new ObjectAddress(rnd.nextInt(), rnd.nextLong());
 			}
 		});
 

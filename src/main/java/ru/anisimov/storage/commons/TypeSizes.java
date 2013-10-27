@@ -5,4 +5,5 @@ package ru.anisimov.storage.commons;
  */
 public interface TypeSizes {
 	static final int BYTES_IN_LONG = Long.SIZE / Byte.SIZE;
+	static final int BYTES_IN_INT = Integer.SIZE / Byte.SIZE;
 }

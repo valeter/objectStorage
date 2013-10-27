@@ -22,6 +22,16 @@ public class DataGenerator {
 		return result;
 	}
 
+	public static int[] generateInts(int count) {
+		int[] result = new int[count];
+
+		for (int i = 0; i < count; i++) {
+			result[i] = rnd.nextInt();
+		}
+
+		return result;
+	}
+
 	public static long[] generateDifferentLongs(int count) {
 		long[] result = new long[count];
 

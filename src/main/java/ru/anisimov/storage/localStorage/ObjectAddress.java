@@ -6,16 +6,14 @@ import java.util.Arrays;
  * @author Ivan Anisimov (ivananisimov2010@gmail.com)
  */
 class ObjectAddress {
-	public static final ObjectAddress EMPTY_ADDRESS = new ObjectAddress(-1, -1, -1);
+	public static final ObjectAddress EMPTY_ADDRESS = new ObjectAddress(-1, -1);
 
 	private int fileNumber;
 	private long filePosition;
-	private int objectSize;
 
-	public ObjectAddress(int fileNumber, long filePosition, int objectSize) {
+	public ObjectAddress(int fileNumber, long filePosition) {
 		this.fileNumber = fileNumber;
 		this.filePosition = filePosition;
-		this.objectSize = objectSize;
 	}
 
 	public int getFileNumber() {
@@ -26,12 +24,8 @@ class ObjectAddress {
 		return filePosition;
 	}
 
-	public int getObjectSize() {
-		return objectSize;
-	}
-
 	private Object[] keyArray() {
-		return new Object[]{fileNumber, filePosition, objectSize};
+		return new Object[]{fileNumber, filePosition};
 	}
 
 	@Override

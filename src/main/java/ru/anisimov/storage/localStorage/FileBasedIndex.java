@@ -17,8 +17,7 @@ class FileBasedIndex {
 	private static final int CELL_OFFSET_ID = 0 * TypeSizes.BYTES_IN_LONG;
 	private static final int CELL_OFFSET_FILE_NUM = 1 * TypeSizes.BYTES_IN_LONG;
 	private static final int CELL_OFFSET_FILE_POSITION = 2 * TypeSizes.BYTES_IN_LONG;
-	private static final int CELL_OFFSET_OBJECT_SIZE = 3 * TypeSizes.BYTES_IN_LONG;
-	private static final int CELL_OFFSET_NEXT_POINTER = 4 * TypeSizes.BYTES_IN_LONG;
+	private static final int CELL_OFFSET_NEXT_POINTER = 3 * TypeSizes.BYTES_IN_LONG;
 	private static final long END_POINTER = -1;
 
 	private final int HASH_TABLE_SIZE;
@@ -31,7 +30,7 @@ class FileBasedIndex {
 		this(fileName, newIndex, ESTIMATED_HASH_TABLE_SIZE);
 	}
 
-	FileBasedIndex(String fileName, boolean newIndex, int HASH_TABLE_SIZE) throws IOException {
+	protected FileBasedIndex(String fileName, boolean newIndex, int HASH_TABLE_SIZE) throws IOException {
 		this.HASH_TABLE_SIZE = HASH_TABLE_SIZE;
 		this.CELL_COUNT_POSITION = FIRST_POINTER_POSITION + this.HASH_TABLE_SIZE * TypeSizes.BYTES_IN_LONG;
 		this.FIRST_CELL_POSITION = this.CELL_COUNT_POSITION + TypeSizes.BYTES_IN_LONG;
@@ -59,9 +58,8 @@ class FileBasedIndex {
 				if (cellID == ID) {
 					int cellFileNum = (int) in.readLong(cellAddress + CELL_OFFSET_FILE_NUM);
 					long cellFilePosition = in.readLong(cellAddress + CELL_OFFSET_FILE_POSITION);
-					int cellObjectSize = (int) in.readLong(cellAddress + CELL_OFFSET_OBJECT_SIZE);
 
-					return new ObjectAddress(cellFileNum, cellFilePosition, cellObjectSize);
+					return new ObjectAddress(cellFileNum, cellFilePosition);
 				}
 
 				cellAddress = in.readLong(cellAddress + CELL_OFFSET_NEXT_POINTER);
@@ -130,6 +128,5 @@ class FileBasedIndex {
 	private void writeObjectAddress(FileReaderWriter out, long position, ObjectAddress address) throws IOException {
 		out.writeLong(position + CELL_OFFSET_FILE_NUM, address.getFileNumber());
 		out.writeLong(position + CELL_OFFSET_FILE_POSITION, address.getFilePosition());
-		out.writeLong(position + CELL_OFFSET_OBJECT_SIZE, address.getObjectSize());
 	}
 }
