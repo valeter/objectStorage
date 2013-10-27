@@ -2,6 +2,7 @@ package ru.anisimov.storage.localStorage;
 
 import org.junit.After;
 import org.junit.Test;
+import ru.anisimov.storage.commons.DataGenerator;
 
 import java.io.File;
 import java.util.Random;
@@ -43,7 +44,7 @@ public class ObjectContainerSupervisorTest {
 
 		for (int i = 0; i < testCount; i++) {
 			supervisor.remove(addresses[i]);
-			assertArrayEquals(null, supervisor.get(addresses[i]));
+			assertEquals(null, supervisor.get(addresses[i]));
 		}
 	}
 
@@ -60,14 +61,14 @@ public class ObjectContainerSupervisorTest {
 		}
 
 		for (int i = 0; i < testCount; i++) {
-			assertArrayEquals(objects[i], supervisor.get(addresses[i]));
+			assertArrayEquals(objects[i], supervisor.get(addresses[i]).getObject());
 		}
 	}
 
 	@Test
 	public void testGetContainerCount() throws Exception {
 		ObjectContainerSupervisor supervisor = new ObjectContainerSupervisor(TEST_DIR_NAME, 1000);
-		int objectsCount = 10;
+		int objectsCount = 1000;
 		ObjectAddress[] addresses = new ObjectAddress[objectsCount];
 		for (int i = 0; i < objectsCount; i++) {
 			addresses[i] = supervisor.put(i, new byte[(int) supervisor.getMaxObjectSize(1)]);
@@ -77,6 +78,26 @@ public class ObjectContainerSupervisorTest {
 		for (int i = 0; i < objectsCount; i++) {
 			supervisor.remove(addresses[i]);
 			supervisor.put(i, new byte[(int) supervisor.getMaxObjectSize(3)]);
+		}
+		assertEquals(objectsCount + (objectsCount + 2) / 3, supervisor.getContainersCount());
+	}
+
+	@Test
+	public void testGetContainerCountDoesNotDependsOnObjectOrder() throws Exception {
+		ObjectContainerSupervisor supervisor = new ObjectContainerSupervisor(TEST_DIR_NAME, 1000);
+		int objectsCount = 1000;
+		byte[][] objects = new byte[objectsCount * 2][];
+		for (int i = 0; i < objectsCount; i++) {
+			objects[i] = new byte[(int) supervisor.getMaxObjectSize(1)];
+		}
+		for (int i = objectsCount; i < objectsCount * 2; i++) {
+			objects[i] = new byte[(int) supervisor.getMaxObjectSize(3)];
+		}
+
+		int[] order = DataGenerator.generateDifferentInts(objectsCount * 2);
+		for (int i = 0; i < objectsCount * 2; i++) {
+			int ind = order[i];
+			supervisor.put(i, objects[ind]);
 		}
 		assertEquals(objectsCount + (objectsCount + 2) / 3, supervisor.getContainersCount());
 	}

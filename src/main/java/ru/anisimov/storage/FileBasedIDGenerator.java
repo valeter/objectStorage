@@ -10,6 +10,14 @@ import java.io.Serializable;
 
 /**
  * @author Ivan Anisimov (ivananisimov2010@gmail.com)
+ *
+ * Represents single file with following structure:
+ * |optimization counter flag - 1 byte| |optimization counter - 8 bytes| |free id counter - 8 bytes| |free id| ... |free id|
+ *
+ * Optimization counter at start = Long.MIN_VALUE. If otimization counter flag is active, this counter represents free id.
+ * After id is taken, optimization counter increments. After it reaches Long.MAX_VALUE it's flag sets to inactive state and
+ * generator starts to use only free id's from list at the end. 
+ *
  */
 class FileBasedIDGenerator implements IDGenerator, Serializable {
 	private static final long serialVersionUID = -8681731364222934648L;

@@ -6,6 +6,8 @@ import ru.anisimov.storage.io.FileReaderWriter;
 import java.io.File;
 import java.io.IOException;
 import java.util.Arrays;
+import java.util.LinkedList;
+import java.util.List;
 
 /**
  *
@@ -71,26 +73,49 @@ class ObjectContainer {
 	public ObjectAddress writeBytes(int ID, byte[] bytes) throws IOException {
 		try (FileReaderWriter out = FileReaderWriter.openForWriting(fileName)) {
 			long nextLastByte = lastByte + getNeededSpace(bytes);
-			new ObjectRecord(lastByte).write(out, new RecordData(ID, bytes.length, bytes));
 			setRecordsCount(out, ++recordsCount);
+			new ObjectRecord(lastByte).write(out, new RecordData(ID, bytes.length, bytes));
 			lastRecord = lastByte;
 			lastByte = nextLastByte;
 			return new ObjectAddress(getNumber(), lastRecord);
 		}
 	}
 
-	public byte[] getBytes(long position) throws IOException {
+	public RecordData getData(long position) throws IOException {
 		try (FileReaderWriter in = FileReaderWriter.openForReading(fileName)) {
 			ObjectRecord record = new ObjectRecord(position);
 			if (record.isRemoved(in)) {
 				return null;
 			}
-			return record.parseAll(in).getObject();
+			return record.parseAll(in);
 		}
 	}
 
 	public long getSize() {
 		return new File(fileName).length();
+	}
+
+	public List<RecordData> getRecords() throws IOException {
+		long recordsCount = parseRecordsCount();
+		List<RecordData> result = new LinkedList<>();
+
+		long pointer = OBJECT_RECORDS_START_POSITION;
+		try (FileReaderWriter in = FileReaderWriter.openForReading(fileName)) {
+			while (recordsCount > 0 && pointer <= getSize()) {
+				ObjectRecord record = new ObjectRecord(pointer);
+				if (record.isRemoved(in)) {
+					continue;
+				}
+				RecordData data = record.parseAll(in);
+
+				if (data.getObject() != null && data.getSize() == data.getObject().length) {
+					result.add(data);
+				}
+				pointer = record.getNextRecord(in);
+			}
+		}
+
+		return result;
 	}
 
 	@Override
@@ -175,9 +200,35 @@ class ObjectContainer {
 			return ID;
 		}
 
+		private Object[] keyArray() {
+			return new Object[] {ID, size};
+		}
+
+		@Override
+		public int hashCode() {
+			int prime = 31;
+			int result = 17;
+			result = prime * result + Arrays.hashCode(keyArray());
+			result = prime * result + Arrays.hashCode(object);
+			return result;
+		}
+
+		@Override
+		public boolean equals(Object obj) {
+			if (this == obj) {
+				return true;
+			}
+			if (!(obj instanceof RecordData)) {
+				return false;
+			}
+
+			RecordData that = (RecordData) obj;
+			return Arrays.equals(this.keyArray(), that.keyArray()) && Arrays.equals(this.getObject(), that.getObject());
+		}
+
 		@Override
 		public String toString() {
-			return "[" + ID + " " + size + " " + Arrays.toString(object) + "]";
+			return Arrays.toString(this.keyArray());
 		}
 	}
 }

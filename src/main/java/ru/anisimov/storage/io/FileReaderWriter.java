@@ -10,6 +10,8 @@ import java.nio.channels.FileChannel;
  * @author Ivan Anisimov (ivananisimov2010@gmail.com)
  */
 public abstract class FileReaderWriter implements AutoCloseable {
+
+
 	private final String fileName;
 	private FileChannel channel;
 
@@ -104,7 +106,6 @@ public abstract class FileReaderWriter implements AutoCloseable {
 
 	@Override
 	public void close() throws IOException {
-		if (channel != null)
-			channel.close();
+		channel.close();
 	}
 }

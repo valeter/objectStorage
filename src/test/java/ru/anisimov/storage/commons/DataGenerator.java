@@ -52,6 +52,26 @@ public class DataGenerator {
 		return result;
 	}
 
+	public static int[] generateDifferentInts(int count) {
+		int[] result = new int[count];
+
+		int[] temp = new int[count];
+		for (int i = 0; i < count; i++) {
+			temp[i] = i;
+		}
+
+		int top = temp.length;
+		for (int i = 0; i < count; i++) {
+			int nextInd = rnd.nextInt(top--);
+			result[i] = temp[nextInd];
+			int t = temp[nextInd];
+			temp[nextInd] = temp[top];
+			temp[top] = t;
+		}
+
+		return result;
+	}
+
 	public static <T> void generateObjects(T[] array, ObjectGenerator<T> generator) {
 		for (int i = 0; i < array.length; i++) {
 			array[i] = generator.generate(rnd);

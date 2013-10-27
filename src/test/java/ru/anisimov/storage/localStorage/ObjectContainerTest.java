@@ -57,7 +57,7 @@ public class ObjectContainerTest {
 		}
 
 		for (int i = 0; i < testCount; i++) {
-			byte[] actualBytes = container.getBytes(addresses.get(i).getFilePosition());
+			byte[] actualBytes = container.getData(addresses.get(i).getFilePosition()).getObject();
 			assertArrayEquals(expectedBytes.get(i), actualBytes);
 		}
 	}
@@ -77,15 +77,14 @@ public class ObjectContainerTest {
 
 		for (int i = 0; i < testCount / 2; i++) {
 			container.removeBytes(addresses.get(i).getFilePosition());
-			byte[] actualBytes = container.getBytes(addresses.get(i).getFilePosition());
-			assertEquals(null, actualBytes);
+			assertEquals(null, container.getData(addresses.get(i).getFilePosition()));
 		}
 
 		ObjectAddress a = container.writeBytes(0, new byte[0]);
-		assertArrayEquals(new byte[0], container.getBytes(a.getFilePosition()));
+		assertArrayEquals(new byte[0], container.getData(a.getFilePosition()).getObject());
 
 		for (int i = testCount / 2; i < testCount; i++) {
-			byte[] actualBytes = container.getBytes(addresses.get(i).getFilePosition());
+			byte[] actualBytes = container.getData(addresses.get(i).getFilePosition()).getObject();
 			assertArrayEquals(expectedBytes.get(i), actualBytes);
 		}
 	}
@@ -105,8 +104,33 @@ public class ObjectContainerTest {
 
 		for (int i = 0; i < testCount / 2; i++) {
 			container.removeBytes(addresses.get(i).getFilePosition());
-			byte[] actualBytes = container.getBytes(addresses.get(i).getFilePosition());
 			assertEquals(testCount - i - 1, container.parseRecordsCount());
 		}
 	}
+
+	@Test
+	public void testGetRecords() throws Exception {
+		ObjectContainer container = new ObjectContainer(TEST_FILE_NAME, 0, true);
+
+		int testCount = 10;
+
+		ArrayList<ObjectContainer.RecordData> records = new ArrayList<>();
+
+		List<ObjectAddress> addresses = new ArrayList<>(testCount);
+		List<byte[]> expectedBytes = new ArrayList<>();
+		for (int i = 0; i < testCount; i++) {
+			byte[] bytes = new byte[rnd.nextInt(100) + 1];
+			expectedBytes.add(bytes);
+			addresses.add(container.writeBytes(i, bytes));
+			records.add(container.getData(addresses.get(addresses.size() - 1).getFilePosition()));
+		}
+
+		for (int i = 0; i < testCount / 2; i++) {
+			container.removeBytes(addresses.get(i).getFilePosition());
+			records.remove(0);
+		}
+
+		assertEquals(records, container.getRecords());
+	}
+
 }

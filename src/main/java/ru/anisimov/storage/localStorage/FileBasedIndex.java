@@ -8,6 +8,13 @@ import java.io.IOException;
 
 /**
  * @author Ivan Anisimov (ivananisimov2010@gmail.com)
+ *
+ * Represents single index file with following structure:
+ * |records count - 8 bytes| |ObjectRecord1| ... |ObjectRecordN|
+ *
+ * Object record structure:
+ * |removed record flag - 1 byte| |object ID - 8 bytes| |object size - 4 bytes| |object bytes|
+ *
  */
 class FileBasedIndex {
 	private static final int ESTIMATED_HASH_TABLE_SIZE = 1_000_000;

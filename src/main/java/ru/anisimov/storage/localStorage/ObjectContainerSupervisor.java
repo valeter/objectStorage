@@ -5,20 +5,24 @@ import ru.anisimov.storage.exceptions.ObjectContainerException;
 
 import java.io.IOException;
 import java.util.ArrayList;
-import java.util.Comparator;
-import java.util.PriorityQueue;
 
 /**
  * @author Ivan Anisimov (ivananisimov2010@gmail.com)
+ *
+ * Manages ObjectContainers. Checkes size of incoming files.
+ * Creates new ObjectContainers if necessary.
+ *
  */
 public class ObjectContainerSupervisor {
 	private static final int ESTIMATED_MAX_CONTAINER_COUNT = 1000;
 	private static final long ESTIMATED_MAX_FILE_SIZE = 2^31;
+	private static final double CONTAINER_FILL_RATIO = 0.9;
 
 	private final long MAX_FILE_SIZE;
+	private final long FULL_CONTAINER_SIZE;
 
-	private PriorityQueue<ObjectContainer> containersQueue;
 	private ArrayList<ObjectContainer> containers;
+	private ArrayList<ObjectContainer> freeContainers;
 
 	private String directoryName;
 
@@ -28,15 +32,10 @@ public class ObjectContainerSupervisor {
 
 	protected ObjectContainerSupervisor(String directoryName, long MAX_FILE_SIZE) {
 		this.MAX_FILE_SIZE = MAX_FILE_SIZE;
+		this.FULL_CONTAINER_SIZE = (long)(this.MAX_FILE_SIZE * CONTAINER_FILL_RATIO);
 		this.directoryName = directoryName;
-		containersQueue = new PriorityQueue<>(ESTIMATED_MAX_CONTAINER_COUNT, new Comparator<ObjectContainer>() {
-			@Override
-			public int compare(ObjectContainer o1, ObjectContainer o2) {
-				return Long.compare(o1.getSize(), o2
-														  .getSize());
-			}
-		});
 		containers = new ArrayList<>(ESTIMATED_MAX_CONTAINER_COUNT);
+		freeContainers = new ArrayList<>(ESTIMATED_MAX_CONTAINER_COUNT);
 	}
 
 	public long getMaxObjectSize(int objectsCount) {
@@ -53,24 +52,40 @@ public class ObjectContainerSupervisor {
 
 	public ObjectAddress put(int ID, byte[] bytes) throws IOException, ObjectContainerException {
 		if (ObjectContainer.getNeededSpace(bytes) > MAX_FILE_SIZE) {
-			throw  new ObjectContainerException("Too big object");
+			throw new ObjectContainerException("Too big object");
 		}
 
-		ObjectContainer smallest = containersQueue.peek();
-		if (smallest == null || smallest.getSize() + ObjectContainer.getNeededSpace(bytes) > MAX_FILE_SIZE) {
+		ObjectContainer bestContainer = getBestContainer(bytes);
+		if (bestContainer == null) { //|| bestContainer.getSize() + ObjectContainer.getNeededSpace(bytes) > MAX_FILE_SIZE) {
 			ObjectContainer container =
 					new ObjectContainer(directoryName + System.getProperty("file.separator") + containers.size(),
 											   containers.size(), true);
 			containers.add(container);
-			containersQueue.add(container);
-			smallest = container;
-
+			freeContainers.add(container);
+			bestContainer = container;
+		}
+		ObjectAddress result = bestContainer.writeBytes(ID, bytes);
+		if (bestContainer.getSize() >= FULL_CONTAINER_SIZE) {
+			freeContainers.remove(bestContainer);
 		}
 
-		return smallest.writeBytes(ID, bytes);
+		return result;
 	}
 
-	public byte[] get(ObjectAddress address) throws IOException {
-		return containers.get(address.getFileNumber()).getBytes(address.getFilePosition());
+	private ObjectContainer getBestContainer(byte[] bytes) {
+		ObjectContainer result = null;
+		long bestQuality = Long.MAX_VALUE;
+		for (ObjectContainer container : freeContainers) {
+			long quality = MAX_FILE_SIZE - container.getSize() - ObjectContainer.getNeededSpace(bytes);
+			if (quality >= 0 && quality < bestQuality) {
+				bestQuality = quality;
+				result = container;
+			}
+		}
+		return result;
+	}
+
+	public ObjectContainer.RecordData get(ObjectAddress address) throws IOException {
+		return containers.get(address.getFileNumber()).getData(address.getFilePosition());
 	}
 }
