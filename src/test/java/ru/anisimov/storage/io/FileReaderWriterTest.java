@@ -1,14 +1,10 @@
 package ru.anisimov.storage.io;
 
-import org.junit.After;
 import org.junit.Before;
 import org.junit.Test;
 import ru.anisimov.storage.commons.DataGenerator;
 import ru.anisimov.storage.commons.TypeSizes;
 
-import java.io.BufferedOutputStream;
-import java.io.File;
-import java.io.FileOutputStream;
 import java.nio.ByteBuffer;
 import java.util.Arrays;
 import java.util.Random;
@@ -32,14 +28,9 @@ public class FileReaderWriterTest {
 
 	@Before
 	public void setUp() throws Exception {
-		try (BufferedOutputStream out = new BufferedOutputStream(new FileOutputStream(TEST_FILE_NAME))) {
-			out.write(CONTENT);
+		try (FileReaderWriter out = FileReaderWriter.openForWriting(TEST_FILE_NAME)) {
+			out.writeBytes(0, CONTENT);
 		}
-	}
-
-	@After
-	public void tearDown() throws Exception {
-		new File(TEST_FILE_NAME).createNewFile();
 	}
 
 	@Test
@@ -113,7 +104,9 @@ public class FileReaderWriterTest {
 			for (int i = 0; i < CONTENT.length; i++) {
 				int longsCount = rnd.nextInt(1000) + 1;
 				long[] longs = DataGenerator.generateLongs(longsCount);
-				rw.writeLong(i, longs);
+				for (int j = 0; j < longsCount; j++) {
+					rw.writeLong(i + (j * TypeSizes.BYTES_IN_LONG), longs[j]);
+				}
 				for (int j = 0; j < longsCount; j++) {
 					long expected = longs[j];
 					long actual = rw.readLong(i + (j * TypeSizes.BYTES_IN_LONG));
@@ -124,19 +117,14 @@ public class FileReaderWriterTest {
 	}
 
 	@Test
-	public void testWriteZeroLongsNoException() throws Exception {
-		try (FileReaderWriter out = FileReaderWriter.openForWriting(TEST_FILE_NAME)) {
-			out.writeLong(0);
-		}
-	}
-
-	@Test
 	public void testWriteInts() throws Exception {
 		try (FileReaderWriter rw = FileReaderWriter.openForReadingWriting(TEST_FILE_NAME)) {
 			for (int i = 0; i < CONTENT.length; i++) {
 				int intsCount = rnd.nextInt(1000) + 1;
 				int[] ints = DataGenerator.generateInts(intsCount);
-				rw.writeInt(i, ints);
+				for (int j = 0; j < intsCount; j++) {
+					rw.writeInt(i + (j * TypeSizes.BYTES_IN_INT), ints[j]);
+				}
 				for (int j = 0; j < intsCount; j++) {
 					int expected = ints[j];
 					int actual = rw.readInt(i + (j * TypeSizes.BYTES_IN_INT));

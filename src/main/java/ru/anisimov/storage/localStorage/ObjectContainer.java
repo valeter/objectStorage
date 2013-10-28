@@ -5,7 +5,6 @@ import ru.anisimov.storage.io.FileReaderWriter;
 
 import java.io.File;
 import java.io.IOException;
-import java.util.Arrays;
 import java.util.LinkedList;
 import java.util.List;
 
@@ -25,8 +24,8 @@ class ObjectContainer {
 	private static final long OBJECT_RECORDS_START_POSITION = RECORDS_COUNT_POSITION + TypeSizes.BYTES_IN_LONG;
 	private static final int OBJECT_RECORD_HEADER_SIZE = 1 + TypeSizes.BYTES_IN_LONG + TypeSizes.BYTES_IN_INT;
 
-	private int number;
 	private String fileName;
+	private int number;
 	private long lastByte;
 	private long lastRecord;
 	private long recordsCount;
@@ -35,7 +34,11 @@ class ObjectContainer {
 		this.fileName = fileName;
 		this.number = number;
 		if (createNew) {
-			new File(this.fileName).createNewFile();
+			File file = new File(this.fileName);
+			if (file.exists()) {
+				file.delete();
+			}
+			file.createNewFile();
 			lastByte = OBJECT_RECORDS_START_POSITION;
 			lastRecord = -1;
 			try (FileReaderWriter out = FileReaderWriter.openForWriting(fileName)) {
@@ -43,6 +46,30 @@ class ObjectContainer {
 			}
 		}
 		this.recordsCount = parseRecordsCount();
+		parseLastByteAndLastRecord();
+	}
+
+	private void parseLastByteAndLastRecord() throws IOException {
+		long recordsCount = this.recordsCount;
+
+		try (FileReaderWriter in = FileReaderWriter.openForReading(fileName)) {
+			long pointer = OBJECT_RECORDS_START_POSITION;
+			long prevPointer = -1;
+			while (recordsCount > 0) {
+				ObjectRecord record = new ObjectRecord(pointer);
+				if (!record.isRemoved(in)) {
+					recordsCount--;
+				}
+				long nextPointer = record.getNextRecord(in);
+				if (nextPointer <= pointer) {
+					break;
+				}
+				prevPointer = pointer;
+				pointer = nextPointer;
+			}
+			lastRecord = prevPointer;
+			lastByte = pointer;
+		}
 	}
 
 	public static int getNeededSpace(byte[] bytes) {
@@ -53,11 +80,8 @@ class ObjectContainer {
 		return number;
 	}
 
-	public void removeBytes(long position) throws  IOException {
-		try (FileReaderWriter out = FileReaderWriter.openForWriting(fileName)) {
-			new ObjectRecord(position).remove(out);
-			setRecordsCount(out, --recordsCount);
-		}
+	public String getFileName() {
+		return fileName;
 	}
 
 	protected long parseRecordsCount() throws IOException {
@@ -70,48 +94,94 @@ class ObjectContainer {
 		out.writeLong(RECORDS_COUNT_POSITION, count);
 	}
 
-	public ObjectAddress writeBytes(int ID, byte[] bytes) throws IOException {
+	public void removeBytes(long position) throws  IOException {
+		removeBytes(new long[] {position});
+	}
+
+	public void removeBytes(long[] positions) throws  IOException {
 		try (FileReaderWriter out = FileReaderWriter.openForWriting(fileName)) {
-			long nextLastByte = lastByte + getNeededSpace(bytes);
-			setRecordsCount(out, ++recordsCount);
-			new ObjectRecord(lastByte).write(out, new RecordData(ID, bytes.length, bytes));
-			lastRecord = lastByte;
-			lastByte = nextLastByte;
-			return new ObjectAddress(getNumber(), lastRecord);
+			for (int i = 0; i < positions.length; i++) {
+				new ObjectRecord(positions[i]).remove(out);
+				recordsCount--;
+			}
+			setRecordsCount(out, recordsCount);
 		}
 	}
 
-	public RecordData getData(long position) throws IOException {
-		try (FileReaderWriter in = FileReaderWriter.openForReading(fileName)) {
-			ObjectRecord record = new ObjectRecord(position);
-			if (record.isRemoved(in)) {
-				return null;
+	public ObjectAddress writeBytes(long ID, byte[] bytes) throws IOException {
+		return writeBytes(new long[] {ID}, new byte[][]{bytes})[0];
+	}
+
+	public ObjectAddress[] writeBytes(long[] ID, byte[][] bytes) throws IOException {
+		return writeBytes(ID, bytes, 0, ID.length);
+	}
+
+	public ObjectAddress[] writeBytes(long[] ID, byte[][] bytes, int from, int count) throws IOException {
+		int objectsCount = count;
+		ObjectAddress[] result = new ObjectAddress[objectsCount];
+		try (FileReaderWriter out = FileReaderWriter.openForWriting(fileName)) {
+			setRecordsCount(out, recordsCount + objectsCount);
+			for (int i = from; i < from + count; i++) {
+				result[i - from] = writeObject(out, ID[i], bytes[i]);
+				recordsCount++;
 			}
-			return record.parseAll(in);
+		}
+		return result;
+	}
+
+	private ObjectAddress writeObject(FileReaderWriter out, long ID, byte[] bytes) throws IOException {
+		long nextLastByte = lastByte + getNeededSpace(bytes);
+		new ObjectRecord(lastByte).write(out, new RecordData(ID, bytes.length, bytes));
+		lastRecord = lastByte;
+		lastByte = nextLastByte;
+		return new ObjectAddress(getNumber(), lastRecord);
+	}
+
+	public RecordData getData(long position) throws IOException {
+		return getData(new long[] {position})[0];
+	}
+
+	public RecordData[] getData(long[] positions) throws IOException {
+		try (FileReaderWriter in = FileReaderWriter.openForReading(fileName)) {
+			RecordData[] result = new RecordData[positions.length];
+			for (int i = 0; i < positions.length; i++) {
+				ObjectRecord record = new ObjectRecord(positions[i]);
+				if (record.isRemoved(in)) {
+					result[i] = null;
+					continue;
+				}
+				result[i] = record.parseAll(in);
+			}
+			return result;
 		}
 	}
 
 	public long getSize() {
-		return new File(fileName).length();
+		return lastByte;
 	}
 
-	public List<RecordData> getRecords() throws IOException {
+	public List<ObjectAddress> getRecordsAddresses() throws IOException {
 		long recordsCount = parseRecordsCount();
-		List<RecordData> result = new LinkedList<>();
+		List<ObjectAddress> result = new LinkedList<>();
 
 		long pointer = OBJECT_RECORDS_START_POSITION;
 		try (FileReaderWriter in = FileReaderWriter.openForReading(fileName)) {
-			while (recordsCount > 0 && pointer <= getSize()) {
+			while (recordsCount > 0 && pointer < getSize()) {
 				ObjectRecord record = new ObjectRecord(pointer);
-				if (record.isRemoved(in)) {
-					continue;
-				}
-				RecordData data = record.parseAll(in);
+				if (!record.isRemoved(in)) {
+					RecordData data = record.parseAll(in);
+					ObjectAddress address = new ObjectAddress(number, pointer);
 
-				if (data.getObject() != null && data.getSize() == data.getObject().length) {
-					result.add(data);
+					if (data.getObject() != null && data.getSize() == data.getObject().length) {
+						result.add(address);
+						recordsCount--;
+					}
 				}
-				pointer = record.getNextRecord(in);
+				long nextPointer = record.getNextRecord(in);
+				if (nextPointer <= pointer) {
+					break;
+				}
+				pointer = nextPointer;
 			}
 		}
 
@@ -174,61 +244,6 @@ class ObjectContainer {
 
 		public long getPosition() {
 			return position;
-		}
-	}
-
-	public static class RecordData {
-		private long ID;
-		private int size;
-		private byte[] object;
-
-		public RecordData(long ID, int size, byte[] object) {
-			this.ID = ID;
-			this.size = size;
-			this.object = object;
-		}
-
-		public byte[] getObject() {
-			return object;
-		}
-
-		public int getSize() {
-			return size;
-		}
-
-		public long getID() {
-			return ID;
-		}
-
-		private Object[] keyArray() {
-			return new Object[] {ID, size};
-		}
-
-		@Override
-		public int hashCode() {
-			int prime = 31;
-			int result = 17;
-			result = prime * result + Arrays.hashCode(keyArray());
-			result = prime * result + Arrays.hashCode(object);
-			return result;
-		}
-
-		@Override
-		public boolean equals(Object obj) {
-			if (this == obj) {
-				return true;
-			}
-			if (!(obj instanceof RecordData)) {
-				return false;
-			}
-
-			RecordData that = (RecordData) obj;
-			return Arrays.equals(this.keyArray(), that.keyArray()) && Arrays.equals(this.getObject(), that.getObject());
-		}
-
-		@Override
-		public String toString() {
-			return Arrays.toString(this.keyArray());
 		}
 	}
 }

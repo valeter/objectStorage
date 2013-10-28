@@ -5,7 +5,7 @@ import java.util.Arrays;
 /**
  * @author Ivan Anisimov (ivananisimov2010@gmail.com)
  */
-class ObjectAddress {
+public class ObjectAddress {
 	public static final ObjectAddress EMPTY_ADDRESS = new ObjectAddress(-1, -1);
 
 	private int fileNumber;

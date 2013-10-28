@@ -2,7 +2,9 @@ package ru.anisimov.storage.io;
 
 import ru.anisimov.storage.commons.TypeSizes;
 
-import java.io.*;
+import java.io.FileInputStream;
+import java.io.IOException;
+import java.io.RandomAccessFile;
 import java.nio.ByteBuffer;
 import java.nio.channels.FileChannel;
 
@@ -10,57 +12,42 @@ import java.nio.channels.FileChannel;
  * @author Ivan Anisimov (ivananisimov2010@gmail.com)
  */
 public abstract class FileReaderWriter implements AutoCloseable {
-
-
-	private final String fileName;
 	private FileChannel channel;
 
-	private FileReaderWriter(String fileName) {
-		this.fileName = fileName;
-	}
-
-	public static FileReaderWriter openForReading(String fileName) throws IOException {
-		return new FileReaderWriter(fileName) {
+	public static FileReaderWriter openForReading(final String fileName) throws IOException {
+		return new FileReaderWriter() {
 			@Override
-			protected FileChannel getChannel(String fileName) throws IOException {
-				return new FileInputStream(this.getFileName()).getChannel();
+			protected FileChannel getChannel() throws IOException {
+				return new FileInputStream(fileName).getChannel();
 			}
 		}.prepare();
 	}
 
-	public static FileReaderWriter openForWriting(String fileName) throws IOException {
-		return new FileReaderWriter(fileName) {
+	public static FileReaderWriter openForWriting(final String fileName) throws IOException {
+		return new FileReaderWriter() {
 			@Override
-			protected FileChannel getChannel(String fileName) throws IOException {
-				return new RandomAccessFile(this.getFileName(), "rw").getChannel();
+			protected FileChannel getChannel() throws IOException {
+				return new RandomAccessFile(fileName, "rw").getChannel();
 			}
 		}.prepare();
 	}
 
-	public static FileReaderWriter openForReadingWriting(String fileName) throws IOException {
-		return new FileReaderWriter(fileName) {
+	public static FileReaderWriter openForReadingWriting(final String fileName) throws IOException {
+		return new FileReaderWriter() {
 			@Override
-			protected FileChannel getChannel(String fileName) throws IOException {
-				return new RandomAccessFile(this.getFileName(), "rw").getChannel();
+			protected FileChannel getChannel() throws IOException {
+				return new RandomAccessFile(fileName, "rw").getChannel();
 			}
 		}.prepare();
 	}
 
 	protected FileReaderWriter prepare() throws IOException {
-		try {
-			this.channel = getChannel(fileName);
-		} catch (IOException e) {
-			throw e;
-		}
+		this.channel = getChannel();
 		return this;
 	}
 
-	protected abstract FileChannel getChannel(String fileName) throws IOException;
-
-	protected String getFileName() {
-		return fileName;
-	}
-
+	protected abstract FileChannel getChannel() throws IOException;
+/*
 	public byte[] readByte(long position, int count) throws IOException {
 		ByteBuffer buffer = ByteBuffer.allocate(count);
 		channel.read(buffer, position);
@@ -102,7 +89,45 @@ public abstract class FileReaderWriter implements AutoCloseable {
 			buffer.putInt(number);
 		}
 		writeBytes(position, buffer.array());
+	}*/
+
+	public byte[] readByte(long position, int count) throws IOException {
+		ByteBuffer buffer = channel.map(FileChannel.MapMode.READ_ONLY, position, count);
+		byte[] result = new byte[count];
+		buffer.get(result);
+		return result;
 	}
+
+	public byte readByte(long position) throws IOException {
+		ByteBuffer buffer = channel.map(FileChannel.MapMode.READ_ONLY, position, 1);
+		return buffer.get();
+	}
+
+	public long readLong(long position) throws IOException {
+		ByteBuffer buffer = channel.map(FileChannel.MapMode.READ_ONLY, position, TypeSizes.BYTES_IN_LONG);
+		return buffer.getLong();
+	}
+
+	public int readInt(long position) throws IOException {
+		ByteBuffer buffer = channel.map(FileChannel.MapMode.READ_ONLY, position, TypeSizes.BYTES_IN_INT);
+		return buffer.getInt();
+	}
+
+	public void writeBytes(long position, byte... bytes) throws IOException {
+		ByteBuffer buffer = channel.map(FileChannel.MapMode.READ_WRITE, position, bytes.length);
+		buffer.put(bytes);
+	}
+
+	public void writeLong(long position, long number) throws IOException {
+		ByteBuffer buffer = channel.map(FileChannel.MapMode.READ_WRITE, position, TypeSizes.BYTES_IN_LONG);
+		buffer.putLong(number);
+	}
+
+	public void writeInt(long position, int number) throws IOException {
+		ByteBuffer buffer = channel.map(FileChannel.MapMode.READ_WRITE, position, TypeSizes.BYTES_IN_INT);
+		buffer.putInt(number);
+	}
+
 
 	@Override
 	public void close() throws IOException {

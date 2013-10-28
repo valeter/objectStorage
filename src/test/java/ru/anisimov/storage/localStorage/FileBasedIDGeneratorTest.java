@@ -1,6 +1,6 @@
-package ru.anisimov.storage;
+package ru.anisimov.storage.localStorage;
 
-import org.junit.After;
+import org.junit.AfterClass;
 import org.junit.Test;
 import ru.anisimov.storage.exceptions.IDGeneratorException;
 
@@ -9,8 +9,8 @@ import java.util.HashSet;
 import java.util.Random;
 import java.util.Set;
 
-import static junit.framework.Assert.assertEquals;
-import static junit.framework.Assert.fail;
+import static org.junit.Assert.assertEquals;
+import static org.junit.Assert.fail;
 
 /**
  * @author Ivan Anisimov (ivananisimov2010@gmail.com)
@@ -20,8 +20,8 @@ public class FileBasedIDGeneratorTest {
 	private static final String TEST_FILE_NAME = FileBasedIDGeneratorTest.class.getResource(RESOURCE_FILE_NAME).getFile();
 	private static final Random rnd = new Random(System.currentTimeMillis());
 
-	@After
-	public void tearDown() throws Exception {
+	@AfterClass
+	public static void tearDown() throws Exception {
 		new File(TEST_FILE_NAME).createNewFile();
 	}
 
@@ -121,6 +121,21 @@ public class FileBasedIDGeneratorTest {
 
 		for (long i = 0; i <= 1000; i++) {
 			generator.addFreeID(i);
+			assertEquals(i, generator.generateID());
+		}
+	}
+
+	@Test
+	public void testWorksOnOldFile() throws Exception {
+		FileBasedIDGenerator generator = new FileBasedIDGenerator(TEST_FILE_NAME, true, 0, 1000);
+
+		for (int i = 0; i <= 1000; i++) {
+			generator.generateID();
+		}
+
+		FileBasedIDGenerator newGenerator = new FileBasedIDGenerator(TEST_FILE_NAME, false);
+		for (long i = 0; i <= 1000; i++) {
+			newGenerator.addFreeID(i);
 			assertEquals(i, generator.generateID());
 		}
 	}

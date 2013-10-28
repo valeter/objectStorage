@@ -149,4 +149,42 @@ public class FileBasedIndexTest {
 			assertEquals(addresses[i], index.getAddress(IDs[i]));
 		}
 	}
+
+	@Test
+	public void testWorksOnOldFile() throws Exception {
+		FileBasedIndex index = new FileBasedIndex(TEST_FILE_NAME, true, 1000);
+
+		int testCount = 1000;
+
+		long[] IDs = DataGenerator.generateDifferentLongs(testCount);
+		ObjectAddress[] addresses = new ObjectAddress[testCount];
+		DataGenerator.generateObjects(addresses, new DataGenerator.ObjectGenerator<ObjectAddress>() {
+			@Override
+			public ObjectAddress generate(Random rnd) {
+				return new ObjectAddress(rnd.nextInt(), rnd.nextLong());
+			}
+		});
+
+		for (int i = 0; i < testCount; i++) {
+			index.putAddress(IDs[i], addresses[i]);
+		}
+
+		for (int i = 0; i < testCount / 2; i++) {
+			index.removeAddress(IDs[i]);
+		}
+
+		index = new FileBasedIndex(TEST_FILE_NAME, false);
+
+		for (int i = testCount / 2; i < testCount; i++) {
+			assertEquals(addresses[i], index.getAddress(IDs[i]));
+		}
+
+		for (int i = 0; i < testCount / 2; i++) {
+			index.putAddress(IDs[i], addresses[i]);
+		}
+
+		for (int i = 0; i < testCount; i++) {
+			assertEquals(addresses[i], index.getAddress(IDs[i]));
+		}
+	}
 }
