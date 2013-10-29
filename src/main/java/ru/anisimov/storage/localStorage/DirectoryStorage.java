@@ -6,6 +6,7 @@ import ru.anisimov.storage.Storage;
 import ru.anisimov.storage.exceptions.ContainerException;
 import ru.anisimov.storage.exceptions.IDGeneratorException;
 import ru.anisimov.storage.exceptions.StorageException;
+import ru.anisimov.storage.io.FileReaderWriter;
 
 import java.io.File;
 import java.io.FilenameFilter;
@@ -21,7 +22,6 @@ import java.util.List;
  */
 public class DirectoryStorage implements Storage {
 	private static final String NULL_ARRAY_MESSAGE = "Input array is null";
-	private static final String NULL_OR_NOT_EQUAL_LENGTH_ARRAYS_MESSAGE = "Input arrays are null or their length is not the same";
 
 	private static final String SLASH = System.getProperty("file.separator");
 
@@ -49,14 +49,6 @@ public class DirectoryStorage implements Storage {
 		}
 	}
 
-	public static Storage newStorage(String directoryName) throws StorageException {
-		return new SafeStorage(new DirectoryStorage(directoryName, true), directoryName + SLASH + SAFETY_FILE_NAME);
-	}
-
-	public static Storage getStorage(String directoryName) throws StorageException {
-		return new SafeStorage(new DirectoryStorage(directoryName, false), directoryName + SLASH + SAFETY_FILE_NAME);
-	}
-
 	private static void checkDirectoryName(String directoryName) throws NoSuchFileException, NotDirectoryException {
 		File file = new File(directoryName);
 		if (!file.exists()) {
@@ -67,34 +59,43 @@ public class DirectoryStorage implements Storage {
 		}
 	}
 
-	@Override
-	public long generateKey() throws StorageException {
+	public static Storage newStorage(String directoryName) throws StorageException {
+		return new SafeStorage(new DirectoryStorage(directoryName, true), directoryName + SLASH + SAFETY_FILE_NAME, true);
+	}
+
+	public static Storage getStorage(String directoryName) throws StorageException {
+		return new SafeStorage(new DirectoryStorage(directoryName, false), directoryName + SLASH + SAFETY_FILE_NAME, false);
+	}
+
+	private long[] generateKey(int count) throws StorageException {
 		try {
-			return generator.generateID();
+			return generator.generateID(count);
 		} catch (IDGeneratorException e) {
 			throw new StorageException(e);
 		}
 	}
 
 	@Override
-	public boolean write(long key, byte[] bytes) throws StorageException {
-		return write(new long[] {key}, new byte[][] {bytes});
+	public long write(byte[] bytes) throws StorageException {
+		return write(new byte[][] {bytes})[0];
 	}
 
 	@Override
-	public boolean write(long[] keys, byte[][] bytes) throws StorageException {
-		if (keys == null || bytes == null || keys.length != bytes.length) {
-			throw new StorageException(NULL_OR_NOT_EQUAL_LENGTH_ARRAYS_MESSAGE);
+	public long[] write(byte[][] bytes) throws StorageException {
+		if (bytes == null) {
+			throw new StorageException(NULL_ARRAY_MESSAGE);
 		}
-		for (int i = 0; i < bytes.length; i++) {
+		int objectsCount = bytes.length;
+		for (int i = 0; i < objectsCount; i++) {
 			if (bytes[i] == null) {
 				throw new StorageException(NULL_ARRAY_MESSAGE);
 			}
 		}
 		try {
+			long[] keys = generateKey(objectsCount);
 			ObjectAddress[] addresses = container.put(keys, bytes);
 			index.putAddress(keys, addresses);
-			return true;
+			return keys;
 		} catch (Exception e) {
 			throw new StorageException(e);
 		}
@@ -114,13 +115,9 @@ public class DirectoryStorage implements Storage {
 			int resultLength = keys.length;
 			byte[][] result = new byte[resultLength][];
 			ObjectAddress[] addresses = index.getAddress(keys);
+			RecordData[] data = container.get(addresses);
 			for (int i = 0; i < resultLength; i++) {
-				if (addresses[i] == null || addresses[i] == ObjectAddress.EMPTY_ADDRESS) {
-					result[i] = null;
-					continue;
-				}
-				RecordData data = container.get(addresses[i]);
-				result[i] = (data == null) ? null : data.getObject();
+				result[i] = (data[i] == null) ? null : data[i].getObject();
 			}
 
 			return result;
@@ -141,15 +138,9 @@ public class DirectoryStorage implements Storage {
 		}
 		try {
 			ObjectAddress[] addresses = index.getAddress(keys);
-			for (int i = 0; i < addresses.length; i++) {
-				ObjectAddress address = addresses[i];
-				if (address == null || address == ObjectAddress.EMPTY_ADDRESS) {
-					continue;
-				}
-				generator.addFreeID(keys);
-				index.removeAddress(keys);
-				container.remove(address);
-			}
+			generator.addFreeID(keys);
+			index.removeAddress(keys);
+			container.remove(addresses);
 			return true;
 		} catch (Exception e) {
 			throw new StorageException(e);
@@ -169,9 +160,8 @@ public class DirectoryStorage implements Storage {
 					return name.startsWith(CONTAINER_FILE_PREFIX);
 				}
 			});
+			String pathStart = directoryName + System.getProperty("file.separator");
 			for (String fileName: files) {
-				try {
-					String fullPath = directoryName + System.getProperty("file.separator") + fileName;
 					int num;
 					try {
 						num = Integer.parseInt(fileName.substring(CONTAINER_FILE_PREFIX.length()));
@@ -179,29 +169,35 @@ public class DirectoryStorage implements Storage {
 						continue;
 					}
 
-					String tempFileName = fullPath + ".temp";
+					String fullPath = new StringBuilder().append(pathStart).append(fileName).toString();
+					String tempFileName = new StringBuilder().append(fullPath).append(".temp").toString();
 					Files.copy(new File(fullPath).toPath(), new File(tempFileName).toPath(), StandardCopyOption.REPLACE_EXISTING);
-					ObjectContainer tempContainer = new ObjectContainer(tempFileName, num, false);
-					List<ObjectAddress> addresses = tempContainer.getRecordsAddresses();
-					for (ObjectAddress address : addresses) {
-						RecordData data = tempContainer.getData(address.getFilePosition());
-						ObjectAddress newAddress = container.put(data.getID(), data.getObject());
-						index.putAddress(data.getID(), newAddress);
-					}
+
+					getDataFromContainer(num, tempFileName, resultBuilder);
+
 					System.gc(); // Attempt to remove FileChannel.map blocks from files
 					new File(tempFileName).delete();
-				} catch (IOException e) {
-					resultBuilder.addLostContainer(fileName);
-				} catch (Exception e) {
-					throw new StorageException(e);
-				}
 			}
 			clearTempFiles();
-		} catch (Exception e) {
+		} catch (IOException | ContainerException e) {
 			throw new StorageException(e);
 		}
 
 		return resultBuilder.build();
+	}
+
+	private void getDataFromContainer(int containerNumber, String containerFileName, DirectoryStorageRebuildInfo.Builder resultBuilder) throws StorageException {
+		try (FileReaderWriter rw = FileReaderWriter.openForReadingWriting(containerFileName)) {
+			ObjectContainer tempContainer = new ObjectContainer(rw, containerFileName, containerNumber, false);
+			List<ObjectAddress> addresses = tempContainer.getRecordsAddresses(rw);
+			for (ObjectAddress address : addresses) {
+				RecordData data = tempContainer.getData(rw, address.getFilePosition());
+				ObjectAddress newAddress = container.put(data.getID(), data.getObject());
+				index.putAddress(data.getID(), newAddress);
+			}
+		} catch (Exception e) {
+			resultBuilder.addLostContainer(containerFileName);
+		}
 	}
 
 	private void clearTempFiles() {

@@ -57,11 +57,7 @@ public class FileBasedIndex {
 	}
 
 	public ObjectAddress getAddress(long ID) throws IndexException {
-		try (FileReaderWriter in = FileReaderWriter.openForReading(fileName)) {
-			return getAddress(in, ID);
-		} catch (IOException e) {
-			throw new IndexException(e);
-		}
+		return getAddress(new long[] {ID})[0];
 	}
 
 	public ObjectAddress[] getAddress(long[] ID) throws IndexException {
@@ -101,11 +97,7 @@ public class FileBasedIndex {
 	}
 
 	public void removeAddress(long ID) throws IndexException {
-		try (FileReaderWriter rw = FileReaderWriter.openForReadingWriting(fileName)) {
-			removeAddress(rw, ID);
-		} catch (IOException e) {
-			throw new IndexException(e);
-		}
+		removeAddress(new long[] {ID});
 	}
 
 	public void removeAddress(long[] ID) throws IndexException {
@@ -141,8 +133,14 @@ public class FileBasedIndex {
 	}
 
 	public void putAddress(long ID, ObjectAddress address) throws IndexException {
+		putAddress(new long[] {ID}, new ObjectAddress[] {address});
+	}
+
+	public void putAddress(long[] ID, ObjectAddress[] address) throws IndexException {
 		try (FileReaderWriter rw = FileReaderWriter.openForReadingWriting(fileName)) {
-			putAddress(rw, ID, address);
+			for (int i = 0; i < ID.length; i++) {
+				putAddress(rw, ID[i], address[i]);
+			}
 		} catch (IOException e) {
 			throw new IndexException(e);
 		}
@@ -170,16 +168,6 @@ public class FileBasedIndex {
 		writeObjectAddress(rw, nextAddress, address);
 		rw.writeLong(nextAddress + CELL_OFFSET_NEXT_POINTER, END_POINTER);
 		rw.writeLong(CELL_COUNT_POSITION, cellCount + 1);
-	}
-
-	public void putAddress(long[] ID, ObjectAddress[] address) throws IndexException {
-		try (FileReaderWriter rw = FileReaderWriter.openForReadingWriting(fileName)) {
-			for (int i = 0; i < ID.length; i++) {
-				putAddress(rw, ID[i], address[i]);
-			}
-		} catch (IOException e) {
-			throw new IndexException(e);
-		}
 	}
 
 	private void writeObjectAddress(FileReaderWriter out, long position, ObjectAddress address) throws IOException {

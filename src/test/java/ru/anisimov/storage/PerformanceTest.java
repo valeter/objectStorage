@@ -1,20 +1,18 @@
 package ru.anisimov.storage;
 
-import org.junit.AfterClass;
-import org.junit.Before;
-import org.junit.BeforeClass;
-import org.junit.Test;
+import org.junit.*;
 import ru.anisimov.storage.io.FileReaderWriter;
 import ru.anisimov.storage.localStorage.DirectoryStorage;
 import ru.anisimov.storage.localStorage.FileBasedIndexTest;
 
+import java.io.BufferedWriter;
 import java.io.File;
+import java.io.PrintWriter;
 import java.security.MessageDigest;
 import java.security.NoSuchAlgorithmException;
 import java.util.*;
 
-import static org.junit.Assert.assertArrayEquals;
-import static org.junit.Assert.assertFalse;
+import static org.junit.Assert.*;
 
 /**
  * @author Ivan Anisimov (ivananisimov2010@gmail.com)
@@ -34,7 +32,7 @@ public class PerformanceTest {
 
 	private static final int MULTIPLE_OPERATIONS_FOR_ROW = 1000;
 
-	private static final int maxObjectSize = 1024;
+	private static final int maxObjectSize = 1024 * 1024;
 
 	private static final List<Long> keys = new ArrayList<>();
 	private static final Map<Long, byte[]> hashes = new HashMap<>();
@@ -44,19 +42,16 @@ public class PerformanceTest {
 		operations[WRITE_SINGLE] = new Operation() {
 			@Override
 			public long perform(Storage storage) throws Exception {
-				long start = System.currentTimeMillis();
-				long ID = storage.generateKey();
-				long time = System.currentTimeMillis() - start;
-
 				byte[] object = new byte[rnd.nextInt(maxObjectSize)];
 				rnd.nextBytes(object);
+
+				long start = System.currentTimeMillis();
+				long ID = storage.write(object);
+				long time = System.currentTimeMillis() - start;
+
 				assertFalse("Non unique ID generated", hashes.keySet().contains(ID));
 				keys.add(ID);
 				hashes.put(ID, MD5(object));
-
-				start = System.currentTimeMillis();
-				storage.write(ID, object);
-				time += System.currentTimeMillis() - start;
 
 				return time;
 			}
@@ -92,32 +87,24 @@ public class PerformanceTest {
 		operations[WRITE_MULTIPLE] = new Operation() {
 			@Override
 			public long perform(Storage storage) throws Exception {
-				long[] IDs = new long[MULTIPLE_OPERATIONS_FOR_ROW];
-				long start = System.currentTimeMillis();
-				for (int i = 0; i < MULTIPLE_OPERATIONS_FOR_ROW; i++) {
-					IDs[i] = storage.generateKey();
-				}
-				long time = System.currentTimeMillis() - start;
-
-				for (int i = 0; i < MULTIPLE_OPERATIONS_FOR_ROW; i++) {
-					assertFalse("Non unique ID generated", hashes.keySet().contains(IDs[i]));
-				}
-
 				byte[][] objects = new byte[MULTIPLE_OPERATIONS_FOR_ROW][];
 				for (int i = 0; i < MULTIPLE_OPERATIONS_FOR_ROW; i++) {
 					objects[i] = new byte[rnd.nextInt(maxObjectSize)];
 					rnd.nextBytes(objects[i]);
 				}
 
+				long start = System.currentTimeMillis();
+				long[] IDs = storage.write(objects);
+				long time = System.currentTimeMillis() - start;
+
+				for (int i = 0; i < MULTIPLE_OPERATIONS_FOR_ROW; i++) {
+					assertFalse("Non unique ID generated", hashes.keySet().contains(IDs[i]));
+				}
+
 				for (int i = 0; i < MULTIPLE_OPERATIONS_FOR_ROW; i++) {
 					keys.add(IDs[i]);
 					hashes.put(IDs[i], MD5(objects[i]));
 				}
-
-				start = System.currentTimeMillis();
-				storage.write(IDs, objects);
-				time += System.currentTimeMillis() - start;
-
 				return time;
 			}
 		};
@@ -128,6 +115,7 @@ public class PerformanceTest {
 				for (int i = 0; i < MULTIPLE_OPERATIONS_FOR_ROW; i++) {
 					IDs[i] = keys.get(rnd.nextInt(keys.size()));
 				}
+
 				long start = System.currentTimeMillis();
 				byte[][] object = storage.get(IDs);
 				long time = System.currentTimeMillis() - start;
@@ -141,19 +129,29 @@ public class PerformanceTest {
 		operations[REMOVE_MULTIPLE] = new Operation() {
 			@Override
 			public long  perform(Storage storage) throws Exception {
-				int keyInd = rnd.nextInt(keys.size());
-				long ID = keys.get(keyInd);
+				int maxIDCount = Math.min(MULTIPLE_OPERATIONS_FOR_ROW, keys.size());
+				int IDCount = rnd.nextInt(maxIDCount) + 1;
+				long[] IDs = new long[IDCount];
+				for (int i = 0; i < IDCount; i++) {
+					int nextInd = rnd.nextInt(keys.size());
+					IDs[i] = keys.get(nextInd);
+					keys.remove(nextInd);
+					hashes.remove(IDs[i]);
+				}
 
 				long start = System.currentTimeMillis();
-				storage.remove(ID);
+				storage.remove(IDs);
 				long time = System.currentTimeMillis() - start;
 
-				keys.remove(keyInd);
-				hashes.remove(ID);
+				for (int i = 0; i < IDCount; i++) {
+					assertNull("Wrong object received from storage", storage.get(IDs[i]));
+				}
 				return time;
 			}
 		};
 	}
+
+	private BufferedWriter out = new BufferedWriter(new PrintWriter(System.out));
 
 	@BeforeClass
 	@AfterClass
@@ -170,7 +168,6 @@ public class PerformanceTest {
 	@BeforeClass
 	public static void warmUp() throws Exception {
 		long warmUpOperations = 100;
-
 		Storage storage = DirectoryStorage.newStorage(TEST_DIR_NAME);
 		for (int i = 0; i < warmUpOperations; i++) {
 			if (keys.size() > 0) {
@@ -180,7 +177,7 @@ public class PerformanceTest {
 			}
 		}
 
-		warmUpOperations = 10;
+		warmUpOperations = 5;
 		for (int i = 0; i < warmUpOperations; i++) {
 			if (keys.size() > 0) {
 				operations[rnd.nextInt(3) + 3].perform(storage);
@@ -188,6 +185,11 @@ public class PerformanceTest {
 				operations[3].perform(storage);
 			}
 		}
+	}
+
+	@After
+	public void flushOutput() throws Exception {
+		out.flush();
 	}
 
 	@Before
@@ -198,8 +200,8 @@ public class PerformanceTest {
 
 	@Test
 	public void testWritingSingeSpeed() throws Exception {
-		System.out.println("Test writing single speed");
-		System.out.println();
+		out.write("Test writing single speed"); out.newLine();;
+		out.newLine();
 
 		int operationsCount = 1000;
 
@@ -208,16 +210,32 @@ public class PerformanceTest {
 		for (int i = 0; i < operationsCount; i++) {
 			time += operations[WRITE_SINGLE].perform(storage);
 		}
-		System.out.println(operationsCount + " operations finished in: " + time + " ms");
-		System.out.println("Average operation time: " + (time / operationsCount) + " ms");
-		System.out.println("============================");
+		out.write(operationsCount + " operations finished in: " + time + " ms"); out.newLine();;
+		out.write("Average operation time: " + (time / operationsCount) + " ms"); out.newLine();;
+		out.write("============================"); out.newLine();;
 	}
 
+	@Test
+	public void testWritingMultipleSpeed() throws Exception {
+		out.write("Test writing multiple speed"); out.newLine();;
+		out.newLine();
+
+		int operationsCount = 10;
+
+		Storage storage = DirectoryStorage.newStorage(TEST_DIR_NAME);
+		long time = 0;
+		for (int i = 0; i < operationsCount; i++) {
+			time += operations[WRITE_MULTIPLE].perform(storage);
+		}
+		out.write((operationsCount * MULTIPLE_OPERATIONS_FOR_ROW) + " operations finished in: " + time + " ms"); out.newLine();;
+		out.write("Average operation time: " + (time / (operationsCount * MULTIPLE_OPERATIONS_FOR_ROW)) + " ms"); out.newLine();;
+		out.write("============================"); out.newLine();;
+	}
 
 	@Test
 	public void testReadingSingeSpeed() throws Exception {
-		System.out.println("Test reading single speed");
-		System.out.println();
+		out.write("Test reading single speed"); out.newLine();;
+		out.newLine();
 
 		int operationsCount = 1000;
 
@@ -229,17 +247,17 @@ public class PerformanceTest {
 		for (int i = 0; i < operationsCount; i++) {
 			time += operations[READ_SINGLE].perform(storage);
 		}
-		System.out.println(operationsCount + " operations finished in: " + time + " ms");
-		System.out.println("Average operation time: " + (time / operationsCount) + " ms");
-		System.out.println("============================");
+		out.write(operationsCount + " operations finished in: " + time + " ms"); out.newLine();;
+		out.write("Average operation time: " + (time / operationsCount) + " ms"); out.newLine();;
+		out.write("============================"); out.newLine();;
 	}
 
 	@Test
 	public void testReadingMultipleSpeed() throws Exception {
-		System.out.println("Test reading multiple speed");
-		System.out.println();
+		out.write("Test reading multiple speed"); out.newLine();;
+		out.newLine();
 
-		int operationsCount = 100;
+		int operationsCount = 10;
 
 		Storage storage = DirectoryStorage.newStorage(TEST_DIR_NAME);
 		for (int i = 0; i < 10; i++) {
@@ -249,15 +267,15 @@ public class PerformanceTest {
 		for (int i = 0; i < operationsCount; i++) {
 			time += operations[READ_MULTIPLE].perform(storage);
 		}
-		System.out.println((operationsCount * MULTIPLE_OPERATIONS_FOR_ROW)+ " operations finished in: " + time + " ms");
-		System.out.println("Average operation time: " + (time / (operationsCount * MULTIPLE_OPERATIONS_FOR_ROW)) + " ms");
-		System.out.println("============================");
+		out.write((operationsCount * MULTIPLE_OPERATIONS_FOR_ROW) + " operations finished in: " + time + " ms"); out.newLine();;
+		out.write("Average operation time: " + (time / (operationsCount * MULTIPLE_OPERATIONS_FOR_ROW)) + " ms"); out.newLine();;
+		out.write("============================"); out.newLine();;
 	}
 
 	@Test
 	public void testRemoveSingeSpeed() throws Exception {
-		System.out.println("Test removing single speed");
-		System.out.println();
+		out.write("Test removing single speed"); out.newLine();;
+		out.newLine();
 
 		int operationsCount = 1000;
 
@@ -269,15 +287,35 @@ public class PerformanceTest {
 		for (int i = 0; i < operationsCount; i++) {
 			time += operations[REMOVE_SINGLE].perform(storage);
 		}
-		System.out.println(operationsCount + " operations finished in: " + time + " ms");
-		System.out.println("Average operation time: " + (time / operationsCount) + " ms");
-		System.out.println("============================");
+		out.write(operationsCount + " operations finished in: " + time + " ms"); out.newLine();;
+		out.write("Average operation time: " + (time / operationsCount) + " ms"); out.newLine();;
+		out.write("============================"); out.newLine();;
+	}
+
+	@Test
+	public void testRemoveMultipleSpeed() throws Exception {
+		out.write("Test removing multiple speed"); out.newLine();;
+		out.newLine();
+
+		int operationsCount = 10;
+
+		Storage storage = DirectoryStorage.newStorage(TEST_DIR_NAME);
+		for (int i = 0; i < operationsCount; i++) {
+			operations[WRITE_MULTIPLE].perform(storage);
+		}
+		long time = 0;
+		for (int i = 0; i < operationsCount; i++) {
+			time += operations[REMOVE_MULTIPLE].perform(storage);
+		}
+		out.write((operationsCount * MULTIPLE_OPERATIONS_FOR_ROW) + " operations finished in: " + time + " ms"); out.newLine();;
+		out.write("Average operation time: " + (time / (operationsCount * MULTIPLE_OPERATIONS_FOR_ROW)) + " ms"); out.newLine();;
+		out.write("============================"); out.newLine();;
 	}
 
 	@Test
 	public void testRandomSingeOperationSpeed() throws Exception {
-		System.out.println("Test random single operation speed");
-		System.out.println();
+		out.write("Test random single operation speed"); out.newLine();;
+		out.newLine();
 
 		int operationsCount = 1000;
 
@@ -292,15 +330,38 @@ public class PerformanceTest {
 			}
 			time += operation.perform(storage);
 		}
-		System.out.println(operationsCount + " operations finished in: " + time + " ms");
-		System.out.println("Average operation time: " + (time / operationsCount) + " ms");
-		System.out.println("============================");
+		out.write(operationsCount + " operations finished in: " + time + " ms"); out.newLine();;
+		out.write("Average operation time: " + (time / operationsCount) + " ms"); out.newLine();;
+		out.write("============================"); out.newLine();;
+	}
+
+	@Test
+	public void testRandomMultipleOperationSpeed() throws Exception {
+		out.write("Test random multiple operation speed"); out.newLine();;
+		out.newLine();
+
+		int operationsCount = 10;
+
+		Storage storage = DirectoryStorage.newStorage(TEST_DIR_NAME);
+		long time = 0;
+		for (int i = 0; i < operationsCount; i++) {
+			Operation operation;
+			if (keys.size() > 0) {
+				operation = operations[rnd.nextInt(3) + 3];
+			} else {
+				operation = operations[3];
+			}
+			time += operation.perform(storage);
+		}
+		out.write((operationsCount * MULTIPLE_OPERATIONS_FOR_ROW) + " operations finished in: " + time + " ms"); out.newLine();;
+		out.write("Average operation time: " + (time / (operationsCount * MULTIPLE_OPERATIONS_FOR_ROW)) + " ms"); out.newLine();;
+		out.write("============================"); out.newLine();;
 	}
 
 	@Test
 	public void testSeeBestWritingPerformance() throws Exception {
-		System.out.println("If nothing were done you could reach this writing speed:");
-		System.out.println();
+		out.write("If nothing were done you could reach this writing speed:"); out.newLine();;
+		out.newLine();
 
 		int operationsCount = 1000;
 
@@ -320,9 +381,9 @@ public class PerformanceTest {
 			}
 		}
 
-		System.out.println(operationsCount + " operations finished in: " + time + " ms");
-		System.out.println("Average operation time: " + (time / operationsCount) + " ms");
-		System.out.println("============================");
+		out.write(operationsCount + " operations finished in: " + time + " ms"); out.newLine();;
+		out.write("Average operation time: " + (time / operationsCount) + " ms"); out.newLine();;
+		out.write("============================"); out.newLine();;
 	}
 
 	private static byte[] MD5(byte[] bytes) throws NoSuchAlgorithmException {

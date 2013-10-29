@@ -32,26 +32,12 @@ public class DirectoryStorageTest {
 	}
 
 	@Test
-	public void testGenerateKey() throws Exception {
-		Storage storage = DirectoryStorage.newStorage(TEST_DIR_NAME);
-		Set<Long> used = new HashSet<>();
-		for (int i = 0; i < 1000; i++) {
-			long key = storage.generateKey();
-			if (used.contains(key)) {
-				fail("Not unique key: " + key);
-			}
-			used.add(key);
-		}
-	}
-
-	@Test
 	public void testWriteSingle() throws Exception {
 		Storage storage = DirectoryStorage.newStorage(TEST_DIR_NAME);
 		for (int i = 0; i < 1000; i++) {
-			long ID = storage.generateKey();
 			byte[] object = new byte[rnd.nextInt(100) + 1];
 			rnd.nextBytes(object);
-			storage.write(ID, object);
+			long ID = storage.write(object);
 			assertArrayEquals(object, storage.get(ID));
 		}
 	}
@@ -63,11 +49,10 @@ public class DirectoryStorageTest {
 		long[] IDs = new long[testCount];
 		byte[][] bytes = new byte[testCount][];
 		for (int i = 0; i < testCount; i++) {
-			IDs[i] = storage.generateKey();
 			bytes[i] = new byte[rnd.nextInt(100) + 1];
 			rnd.nextBytes(bytes[i]);
 		}
-		storage.write(IDs, bytes);
+		IDs = storage.write(bytes);
 		assertArrayEquals(bytes, storage.get(IDs));
 	}
 
@@ -76,10 +61,9 @@ public class DirectoryStorageTest {
 		Storage storage = DirectoryStorage.newStorage(TEST_DIR_NAME);
 		Map<Long, byte[]> objects = new HashMap<>();
 		for (int i = 0; i < 1000; i++) {
-			long ID = storage.generateKey();
 			byte[] object = new byte[rnd.nextInt(100) + 1];
 			rnd.nextBytes(object);
-			storage.write(ID, object);
+			long ID = storage.write(object);
 			objects.put(ID, object);
 		}
 
@@ -92,10 +76,9 @@ public class DirectoryStorageTest {
 	public void testRemoveSingle() throws Exception {
 		Storage storage = DirectoryStorage.newStorage(TEST_DIR_NAME);
 		for (int i = 0; i < 1000; i++) {
-			long ID = storage.generateKey();
 			byte[] object = new byte[rnd.nextInt(100) + 1];
 			rnd.nextBytes(object);
-			storage.write(ID, object);
+			long ID = storage.write(object);
 			assertArrayEquals(object, storage.get(ID));
 			storage.remove(ID);
 			assertNull(storage.get(ID));
@@ -105,38 +88,17 @@ public class DirectoryStorageTest {
 	@Test
 	public void testRemoveMultiple() throws Exception {
 		Storage storage = DirectoryStorage.newStorage(TEST_DIR_NAME);
-		int testCount = 1000;
-		long[] IDs = new long[testCount];
+		int testCount = 100;
 		byte[][] bytes = new byte[testCount][];
 		for (int i = 0; i < testCount; i++) {
-			IDs[i] = storage.generateKey();
 			bytes[i] = new byte[rnd.nextInt(100) + 1];
 			rnd.nextBytes(bytes[i]);
 		}
+		long[] IDs = storage.write(bytes);
 		storage.remove(IDs);
 		byte[][] result = storage.get(IDs);
 		for (int i = 0; i < testCount; i++) {
 			assertNull(result[i]);
-		}
-	}
-
-	@Test
-	public void testKeyRemainsUniqueAfterRemove() throws Exception {
-		Storage storage = DirectoryStorage.newStorage(TEST_DIR_NAME);
-
-		int testCount = 1000;
-
-		Set<Long> used = new HashSet<>();
-		for (int i = 0; i < testCount; i++) {
-			long ID = storage.generateKey();
-			if (used.contains(ID)) {
-				fail("Not unique key: " + ID);
-			}
-			used.add(ID);
-			byte[] object = new byte[rnd.nextInt(100) + 1];
-			rnd.nextBytes(object);
-			storage.write(ID, object);
-			storage.remove(ID);
 		}
 	}
 
@@ -149,10 +111,9 @@ public class DirectoryStorageTest {
 		long[] IDs = new long[testCount];
 		byte[][] objects = new byte[testCount][];
 		for (int i = 0; i < testCount; i++) {
-			IDs[i] = storage.generateKey();
 			objects[i] = new byte[rnd.nextInt(100) + 1];
 			rnd.nextBytes(objects[i]);
-			storage.write(IDs[i], objects[i]);
+			IDs[i] = storage.write(objects[i]);
 		}
 
 		storage = DirectoryStorage.getStorage(TEST_DIR_NAME);
@@ -176,22 +137,36 @@ public class DirectoryStorageTest {
 	public void testWorksAfterRebuild() throws Exception {
 		Storage storage = DirectoryStorage.newStorage(TEST_DIR_NAME);
 
-		int testCount = 1000;
+		int testCount = 10;
 
 		long[] IDs = new long[testCount];
 		byte[][] objects = new byte[testCount][];
 		for (int i = 0; i < testCount; i++) {
-			IDs[i] = storage.generateKey();
 			objects[i] = new byte[rnd.nextInt(100) + 1];
 			rnd.nextBytes(objects[i]);
-			storage.write(IDs[i], objects[i]);
+			IDs[i] = storage.write(objects[i]);
 		}
 
 		for (int i = 0; i < testCount / 2; i++) {
 			storage.remove(IDs[i]);
 		}
 
+		for (int i = 0; i < testCount / 2; i++) {
+			assertNull(storage.get(IDs[i]));
+		}
+		for (int i = testCount / 2; i < testCount; i++) {
+			assertArrayEquals(objects[i], storage.get(IDs[i]));
+		}
+
 		storage = DirectoryStorage.getStorage(TEST_DIR_NAME);
+
+		for (int i = 0; i < testCount / 2; i++) {
+			assertNull(storage.get(IDs[i]));
+		}
+		for (int i = testCount / 2; i < testCount; i++) {
+			assertArrayEquals(objects[i], storage.get(IDs[i]));
+		}
+
 		storage.rebuild();
 
 		for (int i = 0; i < testCount / 2; i++) {

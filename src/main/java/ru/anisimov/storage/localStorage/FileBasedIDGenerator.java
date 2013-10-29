@@ -12,35 +12,30 @@ import java.io.Serializable;
  * @author Ivan Anisimov (ivananisimov2010@gmail.com)
  *
  * Represents single file with following structure:
- * |optimization counter flag - 1 byte| |optimization counter - 8 bytes| |free id counter - 8 bytes| |free id| ... |free id|
+ * |optimization counter - 8 bytes| |free id counter - 8 bytes| |free id| ... |free id|
  *
- * Optimization counter at start = Integer.MIN_VALUE. If otimization counter flag is active, this counter represents free id.
- * After id is taken, optimization counter increments. After it reaches Integer.MIN_VALUE + ESTIMATED_ELEMENTS_NUM it's flag sets to inactive state and
- * generator starts to use only free id's from list at the end.
+ * Optimization counter at start = Integer.MIN_VALUE. It represents maximal free id.
+ * While there's free IDs in list generator poll them. If there's no free IDs in list generator increments counter.
+ * If counter reaches max value generator throws IDGeneratorException - there's no more free ID's.
  *
  */
 public class FileBasedIDGenerator implements Serializable {
 	private static final long serialVersionUID = -8681731364222934648L;
 
-	private static final long ESTIMATED_ELEMENTS_NUM = (long)(Integer.MAX_VALUE) * 2l;
+	private static final long MAX_ELEMENTS_NUM = 100_000_000l;
 
-	private static final long COUNTER_FLAG_POSITION = 0;
-	private static final long COUNTER_POSITION = COUNTER_FLAG_POSITION + 1;
+	private static final long COUNTER_POSITION = 0l;
 	private static final long FREE_ID_COUNT_POSITION = COUNTER_POSITION + TypeSizes.BYTES_IN_LONG;
 	private static final long FREE_ID_POSITION = FREE_ID_COUNT_POSITION + TypeSizes.BYTES_IN_LONG;
-
-	private static final byte ACTIVE_COUNTER = 1;
-	private static final byte INACTIVE_COUNTER = -1;
 
 	private final long MIN_ID;
 	private final long MAX_ID;
 
-	private boolean counterActive;
-
 	private String fileName;
+	private long freeIDCount;
 
 	public FileBasedIDGenerator(String fileName, boolean newGenerator) throws IOException {
-		this(fileName, newGenerator, Integer.MIN_VALUE, (long)(Integer.MIN_VALUE) + ESTIMATED_ELEMENTS_NUM);
+		this(fileName, newGenerator, Integer.MIN_VALUE, (long)(Integer.MIN_VALUE) + MAX_ELEMENTS_NUM);
 	}
 
 	FileBasedIDGenerator(String fileName, boolean newGenerator, long MIN_ID, long MAX_ID) throws IOException {
@@ -54,71 +49,61 @@ public class FileBasedIDGenerator implements Serializable {
 					file.delete();
 				}
 				file.createNewFile();
-				rw.writeBytes(COUNTER_FLAG_POSITION, ACTIVE_COUNTER);
 				rw.writeLong(COUNTER_POSITION, this.MIN_ID);
+				rw.writeLong(FREE_ID_COUNT_POSITION, 0);
 			}
-			counterActive = rw.readByte(COUNTER_FLAG_POSITION) == ACTIVE_COUNTER;
+			freeIDCount = rw.readLong(FREE_ID_COUNT_POSITION);
 		}
 	}
 
 	public long generateID() throws IDGeneratorException {
-		try {
-			return (counterActive) ?
-						   getAndIncrementCounter() :
-						   pollLastFreeID();
+		return generateID(1)[0];
+	}
+
+	public long[] generateID(int count) throws IDGeneratorException {
+		try (FileReaderWriter rw = FileReaderWriter.openForReadingWriting(fileName)) {
+			long[] result = new long[count];
+			for (int i = 0; i < count; i++) {
+				result[i] = (freeIDCount == 0) ?
+									getAndIncrementCounter(rw) :
+									pollLastFreeID(rw);
+			}
+			return result;
 		} catch (IOException e) {
-			throw new IDGeneratorException(e);
+			throw  new IDGeneratorException(e);
 		}
 	}
 
-	private long getAndIncrementCounter() throws IOException {
-		try (FileReaderWriter rw = FileReaderWriter.openForReadingWriting(fileName)) {
-			long counter = rw.readLong(COUNTER_POSITION);
-			if (counter >= MAX_ID) {
-				rw.writeBytes(COUNTER_FLAG_POSITION, INACTIVE_COUNTER);
-				counterActive = false;
-			} else {
-				rw.writeLong(COUNTER_POSITION, counter + 1);
-			}
-			return counter;
+	private long getAndIncrementCounter(FileReaderWriter rw) throws IDGeneratorException, IOException {
+		long counter = rw.readLong(COUNTER_POSITION);
+		if (counter > MAX_ID) {
+			throw new IDGeneratorException("No more free IDs");
+		} else {
+			rw.writeLong(COUNTER_POSITION, counter + 1);
 		}
+		return counter;
 	}
 
-	private long pollLastFreeID() throws IOException, IDGeneratorException {
-		try (FileReaderWriter rw = FileReaderWriter.openForReadingWriting(fileName)) {
-			long freeIdCount = rw.readLong(FREE_ID_COUNT_POSITION);
-			if (freeIdCount == 0) {
-				throw new IDGeneratorException("No more free IDs");
-			}
-			long lastFreeIDPosition = FREE_ID_POSITION + ((freeIdCount - 1) * TypeSizes.BYTES_IN_LONG);
-			long freeID = rw.readLong(lastFreeIDPosition);
-			rw.writeLong(FREE_ID_COUNT_POSITION, freeIdCount - 1);
-			return freeID;
-		}
+	private long pollLastFreeID(FileReaderWriter rw) throws IOException {
+		long lastFreeIDPosition = FREE_ID_POSITION + ((freeIDCount - 1) * TypeSizes.BYTES_IN_LONG);
+		long freeID = rw.readLong(lastFreeIDPosition);
+		rw.writeLong(FREE_ID_COUNT_POSITION, --freeIDCount);
+		return freeID;
 	}
 
 	public void addFreeID(long ID) throws IDGeneratorException {
-		try (FileReaderWriter rw = FileReaderWriter.openForReadingWriting(fileName)) {
-			addFreeID(rw, ID);
-		} catch (IOException e) {
-			throw new IDGeneratorException(e);
-		}
+		addFreeID(new long[] {ID});
 	}
 
 	public void addFreeID(long[] ID) throws IDGeneratorException {
 		try (FileReaderWriter rw = FileReaderWriter.openForReadingWriting(fileName)) {
 			for (int i = 0; i < ID.length; i++) {
-				addFreeID(rw, ID[i]);
+				long positionAfterLastFreeID = FREE_ID_POSITION + ((freeIDCount) * TypeSizes.BYTES_IN_LONG);
+				rw.writeLong(positionAfterLastFreeID, ID[i]);
+				rw.writeLong(FREE_ID_COUNT_POSITION, ++freeIDCount);
 			}
 		} catch (IOException e) {
 			throw new IDGeneratorException(e);
 		}
-	}
-
-	private void addFreeID(FileReaderWriter rw, long ID) throws IOException {
-		long freeIdCount = rw.readLong(FREE_ID_COUNT_POSITION);
-		long positionAfterLastFreeID = FREE_ID_POSITION + ((freeIdCount) * TypeSizes.BYTES_IN_LONG);
-		rw.writeLong(positionAfterLastFreeID, ID);
-		rw.writeLong(FREE_ID_COUNT_POSITION, freeIdCount + 1);
 	}
 }

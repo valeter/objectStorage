@@ -5,7 +5,6 @@ import ru.anisimov.storage.io.FileReaderWriter;
 
 import java.io.File;
 import java.io.IOException;
-import java.nio.file.Files;
 
 /**
  * @author Ivan Anisimov (ivananisimov2010@gmail.com)
@@ -21,14 +20,17 @@ public class SafeStorage implements Storage {
 	private Storage storage;
 	private String safetyFileName;
 
-	public SafeStorage(Storage storage, String safetyFileName) throws StorageException {
+	public SafeStorage(Storage storage, String safetyFileName, boolean newStorage) throws StorageException {
 		this.safetyFileName = safetyFileName;
 		this.storage = storage;
-		try {
-			File safetyFile = new File(safetyFileName);
-			if (!safetyFile.exists()) {
-				Files.createFile(safetyFile.toPath());
-				setState(STABLE_STATE);
+		try (FileReaderWriter out = FileReaderWriter.openForWriting(safetyFileName)) {
+			if (newStorage) {
+				File file = new File(this.safetyFileName);
+				if (file.exists()) {
+					file.delete();
+				}
+				file.createNewFile();
+				setState(out, STABLE_STATE);
 			}
 			if (getState() == UNSTABLE_STATE) {
 				storage.rebuild();
@@ -38,10 +40,8 @@ public class SafeStorage implements Storage {
 		}
 	}
 
-	private void setState(byte state) throws IOException {
-		try (FileReaderWriter out = FileReaderWriter.openForWriting(safetyFileName)) {
-			out.writeBytes(0, state);
-		}
+	private void setState(FileReaderWriter out, byte state) throws IOException {
+		out.writeBytes(0, state);
 	}
 
 	private byte getState() throws IOException {
@@ -51,31 +51,21 @@ public class SafeStorage implements Storage {
 	}
 
 	@Override
-	public long generateKey() throws StorageException {
+	public long write(final byte[] bytes) throws StorageException {
 		return safeOperation(new StorageOperation<Long>() {
 			@Override
 			public Long perform() throws StorageException {
-				return storage.generateKey();
+				return storage.write(bytes);
 			}
 		});
 	}
 
 	@Override
-	public boolean write(final long key, final byte[] bytes) throws StorageException {
-		return safeOperation(new StorageOperation<Boolean>() {
+	public long[] write(final byte[][] bytes) throws StorageException {
+		return safeOperation(new StorageOperation<long[]>() {
 			@Override
-			public Boolean perform() throws StorageException {
-				return storage.write(key, bytes);
-			}
-		});
-	}
-
-	@Override
-	public boolean write(final long[] keys, final byte[][] bytes) throws StorageException {
-		return safeOperation(new StorageOperation<Boolean>() {
-			@Override
-			public Boolean perform() throws StorageException {
-				return storage.write(keys, bytes);
+			public long[] perform() throws StorageException {
+				return storage.write(bytes);
 			}
 		});
 	}
@@ -136,10 +126,10 @@ public class SafeStorage implements Storage {
 	}
 
 	private <T> T safeOperation(StorageOperation<T> operation) throws StorageException {
-		try {
-			setState(UNSTABLE_STATE);
+		try (FileReaderWriter out = FileReaderWriter.openForWriting(safetyFileName)) {
+			setState(out, UNSTABLE_STATE);
 			T result = operation.perform();
-			setState(STABLE_STATE);
+			setState(out, STABLE_STATE);
 			return result;
 		} catch (IOException e) {
 			throw new StorageException(e);

@@ -3,7 +3,6 @@ package ru.anisimov.storage.localStorage;
 import org.junit.AfterClass;
 import org.junit.BeforeClass;
 import org.junit.Test;
-import ru.anisimov.storage.commons.DataGenerator;
 
 import java.io.File;
 import java.util.Arrays;
@@ -59,7 +58,7 @@ public class ObjectContainerSupervisorTest {
 	public void testRemoveMultiple() throws Exception {
 		ObjectContainerSupervisor supervisor = new ObjectContainerSupervisor(TEST_DIR_NAME, "", true, 1000);
 
-		int testCount = 10000;
+		int testCount = 1000;
 
 		byte[][] objects = new byte[testCount][];
 		long[] IDs = new long[testCount];
@@ -80,7 +79,7 @@ public class ObjectContainerSupervisorTest {
 	@Test
 	public void testPutAndGetSingle() throws Exception {
 		ObjectContainerSupervisor supervisor = new ObjectContainerSupervisor(TEST_DIR_NAME, "", true, 1000);
-		int testCount = 10000;
+		int testCount = 1000;
 		ObjectAddress[] addresses = new ObjectAddress[testCount];
 		byte[][] objects = new byte[testCount][];
 		for (int i = 0; i < testCount; i++) {
@@ -99,7 +98,7 @@ public class ObjectContainerSupervisorTest {
 	public void testPutAndGetMultiple() throws Exception {
 		ObjectContainerSupervisor supervisor = new ObjectContainerSupervisor(TEST_DIR_NAME, "", true, 1000);
 
-		int testCount = 10000;
+		int testCount = 1000;
 
 		byte[][] objects = new byte[testCount][];
 		long[] IDs = new long[testCount];
@@ -144,64 +143,12 @@ public class ObjectContainerSupervisorTest {
 	}
 
 	@Test
-	public void testGetContainerCount() throws Exception {
-		ObjectContainerSupervisor supervisor = new ObjectContainerSupervisor(TEST_DIR_NAME, "", true, 1000);
-		int objectsCount = 1000;
-		ObjectAddress[] addresses = new ObjectAddress[objectsCount];
-		for (int i = 0; i < objectsCount; i++) {
-			addresses[i] = supervisor.put(i, new byte[(int) supervisor.getMaxObjectSize(1)]);
-		}
-		assertEquals(objectsCount, supervisor.getContainersCount());
-
-		for (int i = 0; i < objectsCount; i++) {
-			supervisor.remove(addresses[i]);
-			supervisor.put(i, new byte[(int) supervisor.getMaxObjectSize(3)]);
-		}
-		assertEquals(objectsCount + (objectsCount + 2) / 3, supervisor.getContainersCount());
-	}
-
-	@Test
-	public void testGetContainerCountDoesNotDependsOnObjectOrder() throws Exception {
-		ObjectContainerSupervisor supervisor = new ObjectContainerSupervisor(TEST_DIR_NAME, "", true, 1000);
-		int objectsCount = 1000;
-		byte[][] objects = new byte[objectsCount * 2][];
-		for (int i = 0; i < objectsCount; i++) {
-			objects[i] = new byte[(int) supervisor.getMaxObjectSize(1)];
-		}
-		for (int i = objectsCount; i < objectsCount * 2; i++) {
-			objects[i] = new byte[(int) supervisor.getMaxObjectSize(3)];
-		}
-
-		int[] order = DataGenerator.generateDifferentInts(objectsCount * 2);
-		for (int i = 0; i < objectsCount * 2; i++) {
-			int ind = order[i];
-			supervisor.put(i, objects[ind]);
-		}
-		assertEquals(objectsCount + (objectsCount + 2) / 3, supervisor.getContainersCount());
-	}
-
-	@Test
 	public void testWorksOnOldDirectory() throws Exception {
 		ObjectContainerSupervisor supervisor = new ObjectContainerSupervisor(TEST_DIR_NAME, "testCont", true, 1000);
 
 		int testCount = 1000;
+
 		ObjectAddress[] addresses = new ObjectAddress[testCount];
-		for (int i = 0; i < testCount; i++) {
-			addresses[i] = supervisor.put(i, new byte[(int) supervisor.getMaxObjectSize(1)]);
-		}
-		assertEquals(testCount, supervisor.getContainersCount());
-
-		supervisor = new ObjectContainerSupervisor(TEST_DIR_NAME, "testCont", false, 1000);
-
-		for (int i = 0; i < testCount; i++) {
-			supervisor.remove(addresses[i]);
-			supervisor.put(i, new byte[(int) supervisor.getMaxObjectSize(3)]);
-		}
-		assertEquals(testCount + (testCount + 2) / 3, supervisor.getContainersCount());
-
-		supervisor = new ObjectContainerSupervisor(TEST_DIR_NAME, "testCont", true, 1000);
-
-		addresses = new ObjectAddress[testCount];
 		byte[][] objects = new byte[testCount][];
 		for (int i = 0; i < testCount; i++) {
 			int size = rnd.nextInt((int)supervisor.getMaxObjectSize(1)) + 1;

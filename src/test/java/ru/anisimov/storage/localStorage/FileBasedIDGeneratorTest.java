@@ -10,6 +10,7 @@ import java.util.Random;
 import java.util.Set;
 
 import static org.junit.Assert.assertEquals;
+import static org.junit.Assert.assertFalse;
 import static org.junit.Assert.fail;
 
 /**
@@ -55,7 +56,7 @@ public class FileBasedIDGeneratorTest {
 		FileBasedIDGenerator generator = new FileBasedIDGenerator(TEST_FILE_NAME, true, 0, 1000);
 		Set<Long> uniqueIDs = new HashSet<>();
 
-		for (int i = 0; i <= 1000; i++) {
+		for (int i = 0; i <= 100; i++) {
 			generator.generateID();
 		}
 
@@ -102,9 +103,7 @@ public class FileBasedIDGeneratorTest {
 	public void testTooManyIDsAfterSingleFree() throws Exception {
 		FileBasedIDGenerator generator = new FileBasedIDGenerator(TEST_FILE_NAME, true, 0, 1000);
 
-		for (int i = 0; i <= 1000; i++) {
-			generator.generateID();
-		}
+		generator.generateID(1001);
 
 		generator.addFreeID(0);
 		generator.generateID();
@@ -115,9 +114,7 @@ public class FileBasedIDGeneratorTest {
 	public void testFreeID() throws Exception {
 		FileBasedIDGenerator generator = new FileBasedIDGenerator(TEST_FILE_NAME, true, 0, 1000);
 
-		for (int i = 0; i <= 1000; i++) {
-			generator.generateID();
-		}
+		generator.generateID(1001);
 
 		for (long i = 0; i <= 1000; i++) {
 			generator.addFreeID(i);
@@ -129,14 +126,46 @@ public class FileBasedIDGeneratorTest {
 	public void testWorksOnOldFile() throws Exception {
 		FileBasedIDGenerator generator = new FileBasedIDGenerator(TEST_FILE_NAME, true, 0, 1000);
 
-		for (int i = 0; i <= 1000; i++) {
-			generator.generateID();
-		}
+		generator.generateID(1001);
 
-		FileBasedIDGenerator newGenerator = new FileBasedIDGenerator(TEST_FILE_NAME, false);
+		FileBasedIDGenerator newGenerator = new FileBasedIDGenerator(TEST_FILE_NAME, false, 0, 1000);
 		for (long i = 0; i <= 1000; i++) {
 			newGenerator.addFreeID(i);
-			assertEquals(i, generator.generateID());
+			assertEquals(i, newGenerator.generateID());
+		}
+	}
+
+	@Test
+	public void uniqueMixedTest() throws Exception {
+		FileBasedIDGenerator generator = new FileBasedIDGenerator(TEST_FILE_NAME, true, 0, 1000);
+		Set<Long> uniqueIDs = new HashSet<>();
+
+		int testCount = 1000;
+
+		long[] IDs = generator.generateID(testCount);
+		for (int i = 0; i < testCount; i++) {
+			assertFalse(uniqueIDs.contains(IDs[i]));
+			uniqueIDs.add(IDs[i]);
+		}
+
+		for (int i = 0; i < testCount; i++) {
+			generator.addFreeID(IDs[i]);
+			uniqueIDs.remove(IDs[i]);
+		}
+
+		for (int i = 0; i < testCount; i++) {
+			assertFalse(uniqueIDs.contains(IDs[i]));
+			uniqueIDs.add(IDs[i]);
+		}
+
+		for (int i = 0; i < testCount; i++) {
+			generator.addFreeID(IDs[i]);
+			uniqueIDs.remove(IDs[i]);
+		}
+
+		for (int i = 0; i < testCount; i++) {
+			assertFalse(uniqueIDs.contains(IDs[i]));
+			uniqueIDs.add(IDs[i]);
 		}
 	}
 }
