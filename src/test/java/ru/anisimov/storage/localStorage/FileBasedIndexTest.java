@@ -8,6 +8,7 @@ import java.io.File;
 import java.util.Arrays;
 import java.util.Random;
 
+import static org.junit.Assert.assertArrayEquals;
 import static org.junit.Assert.assertEquals;
 
 /**
@@ -26,7 +27,7 @@ public class FileBasedIndexTest {
 	public void testOnNonExistingFile() throws Exception {
 		FileBasedIndex index = new FileBasedIndex(TEST_FILE_NAME + ".temp", true, 1000);
 
-		for (int i = 0; i <= 1000; i++) {
+		for (int i = 0; i <= 2000; i++) {
 			index.getAddress(i);
 		}
 
@@ -43,7 +44,7 @@ public class FileBasedIndexTest {
 	public void testPutAddress() throws Exception {
 		FileBasedIndex index = new FileBasedIndex(TEST_FILE_NAME, true, 1000);
 
-		int testCount = 1000;
+		int testCount = 2000;
 
 		long[] IDs = DataGenerator.generateDifferentLongs(testCount);
 		ObjectAddress[] addresses = new ObjectAddress[testCount];
@@ -54,20 +55,16 @@ public class FileBasedIndexTest {
 			}
 		});
 
-		for (int i = 0; i < testCount; i++) {
-			index.putAddress(IDs[i], addresses[i]);
-		}
+		index.putAddress(IDs, addresses);
 
-		for (int i = 0; i < testCount; i++) {
-			assertEquals(addresses[i], index.getAddress(IDs[i]));
-		}
+		assertArrayEquals(addresses, index.getAddress(IDs));
 	}
 
 	@Test
 	public void testSameIDPutRewritesAddress() throws Exception {
 		FileBasedIndex index = new FileBasedIndex(TEST_FILE_NAME, true, 1000);
 
-		int testCount = 1000;
+		int testCount = 2000;
 
 		long[] IDs = new long[testCount];
 		Arrays.fill(IDs, -1);
@@ -90,7 +87,7 @@ public class FileBasedIndexTest {
 	public void testRemoveAddress() throws Exception {
 		FileBasedIndex index = new FileBasedIndex(TEST_FILE_NAME, true, 1000);
 
-		int testCount = 1000;
+		int testCount = 2000;
 
 		long[] IDs = DataGenerator.generateDifferentLongs(testCount);
 		ObjectAddress[] addresses = new ObjectAddress[testCount];
@@ -118,7 +115,7 @@ public class FileBasedIndexTest {
 	public void testPutAfterRemove() throws Exception {
 		FileBasedIndex index = new FileBasedIndex(TEST_FILE_NAME, true, 1000);
 
-		int testCount = 1000;
+		int testCount = 2000;
 
 		long[] IDs = DataGenerator.generateDifferentLongs(testCount);
 		ObjectAddress[] addresses = new ObjectAddress[testCount];
@@ -154,7 +151,7 @@ public class FileBasedIndexTest {
 	public void testWorksOnOldFile() throws Exception {
 		FileBasedIndex index = new FileBasedIndex(TEST_FILE_NAME, true, 1000);
 
-		int testCount = 1000;
+		int testCount = 2000;
 
 		long[] IDs = DataGenerator.generateDifferentLongs(testCount);
 		ObjectAddress[] addresses = new ObjectAddress[testCount];
@@ -173,7 +170,7 @@ public class FileBasedIndexTest {
 			index.removeAddress(IDs[i]);
 		}
 
-		index = new FileBasedIndex(TEST_FILE_NAME, false);
+		index = new FileBasedIndex(TEST_FILE_NAME, false, 1000);
 
 		for (int i = testCount / 2; i < testCount; i++) {
 			assertEquals(addresses[i], index.getAddress(IDs[i]));

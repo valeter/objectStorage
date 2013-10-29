@@ -47,7 +47,7 @@ public abstract class FileReaderWriter implements AutoCloseable {
 	}
 
 	protected abstract FileChannel getChannel() throws IOException;
-/*
+
 	public byte[] readByte(long position, int count) throws IOException {
 		ByteBuffer buffer = ByteBuffer.allocate(count);
 		channel.read(buffer, position);
@@ -67,50 +67,6 @@ public abstract class FileReaderWriter implements AutoCloseable {
 	public int readInt(long position) throws IOException {
 		byte[] bytes = readByte(position, TypeSizes.BYTES_IN_INT);
 		return ByteBuffer.wrap(bytes).getInt();
-	}
-
-	public void writeBytes(long position, byte... bytes) throws IOException {
-		ByteBuffer buffer = ByteBuffer.wrap(bytes);
-		channel.position(position);
-		channel.write(buffer);
-	}
-
-	public void writeLong(long position, long... numbers) throws IOException {
-		ByteBuffer buffer = ByteBuffer.allocate(TypeSizes.BYTES_IN_LONG * numbers.length);
-		for (long number: numbers) {
-			buffer.putLong(number);
-		}
-		writeBytes(position, buffer.array());
-	}
-
-	public void writeInt(long position, int... numbers) throws IOException {
-		ByteBuffer buffer = ByteBuffer.allocate(TypeSizes.BYTES_IN_INT * numbers.length);
-		for (int number: numbers) {
-			buffer.putInt(number);
-		}
-		writeBytes(position, buffer.array());
-	}*/
-
-	public byte[] readByte(long position, int count) throws IOException {
-		ByteBuffer buffer = channel.map(FileChannel.MapMode.READ_ONLY, position, count);
-		byte[] result = new byte[count];
-		buffer.get(result);
-		return result;
-	}
-
-	public byte readByte(long position) throws IOException {
-		ByteBuffer buffer = channel.map(FileChannel.MapMode.READ_ONLY, position, 1);
-		return buffer.get();
-	}
-
-	public long readLong(long position) throws IOException {
-		ByteBuffer buffer = channel.map(FileChannel.MapMode.READ_ONLY, position, TypeSizes.BYTES_IN_LONG);
-		return buffer.getLong();
-	}
-
-	public int readInt(long position) throws IOException {
-		ByteBuffer buffer = channel.map(FileChannel.MapMode.READ_ONLY, position, TypeSizes.BYTES_IN_INT);
-		return buffer.getInt();
 	}
 
 	public void writeBytes(long position, byte... bytes) throws IOException {

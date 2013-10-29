@@ -51,6 +51,26 @@ public class SafeStorage implements Storage {
 	}
 
 	@Override
+	public long generateKey() throws StorageException {
+		return safeOperation(new StorageOperation<Long>() {
+			@Override
+			public Long perform() throws StorageException {
+				return storage.generateKey();
+			}
+		});
+	}
+
+	@Override
+	public long[] generateKey(final int count) throws StorageException {
+		return safeOperation(new StorageOperation<long[]>() {
+			@Override
+			public long[] perform() throws StorageException {
+				return storage.generateKey(count);
+			}
+		});
+	}
+
+	@Override
 	public long write(final byte[] bytes) throws StorageException {
 		return safeOperation(new StorageOperation<Long>() {
 			@Override
@@ -66,6 +86,26 @@ public class SafeStorage implements Storage {
 			@Override
 			public long[] perform() throws StorageException {
 				return storage.write(bytes);
+			}
+		});
+	}
+
+	@Override
+	public boolean write(final long key, final byte[] bytes) throws StorageException {
+		return safeOperation(new StorageOperation<Boolean>() {
+			@Override
+			public Boolean perform() throws StorageException {
+				return storage.write(key, bytes);
+			}
+		});
+	}
+
+	@Override
+	public boolean write(final long[] keys, final byte[][] bytes) throws StorageException {
+		return safeOperation(new StorageOperation<Boolean>() {
+			@Override
+			public Boolean perform() throws StorageException {
+				return storage.write(keys, bytes);
 			}
 		});
 	}

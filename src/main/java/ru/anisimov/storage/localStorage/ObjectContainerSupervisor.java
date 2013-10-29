@@ -14,8 +14,7 @@ import java.util.*;
  * Manages ObjectContainers. Checkes size of incoming files.
  * Creates new ObjectContainers if necessary.
  *
- * For writing always choose container which fits best for current object
- * (MAX_FILE_SIZE - container.getSize() - ObjectContainer.getNeededSpace(bytes) => min)
+ * Uses primitive grouping algorythm if many objects added.
  *
  */
 public class ObjectContainerSupervisor {

@@ -22,6 +22,7 @@ import java.util.List;
  */
 public class DirectoryStorage implements Storage {
 	private static final String NULL_ARRAY_MESSAGE = "Input array is null";
+	private static final String NULL_OR_NOT_SAME_ARRAY_MESSAGE = "Input arrays is null or not same size";
 
 	private static final String SLASH = System.getProperty("file.separator");
 
@@ -67,7 +68,13 @@ public class DirectoryStorage implements Storage {
 		return new SafeStorage(new DirectoryStorage(directoryName, false), directoryName + SLASH + SAFETY_FILE_NAME, false);
 	}
 
-	private long[] generateKey(int count) throws StorageException {
+	@Override
+	public long generateKey() throws StorageException {
+		return generateKey(1)[0];
+	}
+
+	@Override
+	public long[] generateKey(int count) throws StorageException {
 		try {
 			return generator.generateID(count);
 		} catch (IDGeneratorException e) {
@@ -85,17 +92,40 @@ public class DirectoryStorage implements Storage {
 		if (bytes == null) {
 			throw new StorageException(NULL_ARRAY_MESSAGE);
 		}
-		int objectsCount = bytes.length;
-		for (int i = 0; i < objectsCount; i++) {
+		checkBytes(bytes);
+		try {
+			long[] keys = generateKey(bytes.length);
+			ObjectAddress[] addresses = container.put(keys, bytes);
+			index.putAddress(keys, addresses);
+			return keys;
+		} catch (Exception e) {
+			throw new StorageException(e);
+		}
+	}
+
+	private void checkBytes(byte[][] bytes) throws StorageException {
+		for (int i = 0; i < bytes.length; i++) {
 			if (bytes[i] == null) {
 				throw new StorageException(NULL_ARRAY_MESSAGE);
 			}
 		}
+	}
+
+	@Override
+	public boolean write(long key, byte[] bytes) throws StorageException {
+		return write(new long[] {key}, new byte[][] {bytes});
+	}
+
+	@Override
+	public boolean write(long[] keys, byte[][] bytes) throws StorageException {
+		if (bytes == null || keys == null || bytes.length != keys.length) {
+			throw new StorageException(NULL_OR_NOT_SAME_ARRAY_MESSAGE);
+		}
+		checkBytes(bytes);
 		try {
-			long[] keys = generateKey(objectsCount);
 			ObjectAddress[] addresses = container.put(keys, bytes);
 			index.putAddress(keys, addresses);
-			return keys;
+			return true;
 		} catch (Exception e) {
 			throw new StorageException(e);
 		}

@@ -32,7 +32,7 @@ public class PerformanceTest {
 
 	private static final int MULTIPLE_OPERATIONS_FOR_ROW = 1000;
 
-	private static final int maxObjectSize = 1024 * 1024;
+	private static final int maxObjectSize = 1024;
 
 	private static final List<Long> keys = new ArrayList<>();
 	private static final Map<Long, byte[]> hashes = new HashMap<>();
@@ -165,7 +165,7 @@ public class PerformanceTest {
 		new File(TEST_FILE_NAME).createNewFile();
 	}
 
-	@BeforeClass
+	//@BeforeClass
 	public static void warmUp() throws Exception {
 		long warmUpOperations = 100;
 		Storage storage = DirectoryStorage.newStorage(TEST_DIR_NAME);
